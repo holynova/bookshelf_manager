@@ -22,7 +22,7 @@ import {
   Info
 } from 'lucide-react';
 import { db, seedDemoData, type Book } from './db';
-import { scanBookshelfPhoto, type GeminiBookResult } from './gemini';
+import { scanBookshelfPhoto, type LLMBookResult } from './llm';
 
 function App() {
   // Navigation & Theme
@@ -34,9 +34,23 @@ function App() {
   const books = useLiveQuery(() => db.books.toArray()) || [];
 
   // API Config (stored in localStorage)
-  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('gemini_api_key') || '');
+  const [apiBaseUrl, setApiBaseUrl] = useState<string>(() => localStorage.getItem('llm_api_base') || 'https://api.openai.com/v1');
+  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('llm_api_key') || '');
+  const [apiModelName, setApiModelName] = useState<string>(() => localStorage.getItem('llm_model') || 'gpt-4o-mini');
+  const [customPrompt, setCustomPrompt] = useState<string>(() => localStorage.getItem('llm_prompt') || `你是一个专业的图书管理员和图像识别专家。请分析用户提供的书架照片，识别出书架上的所有书籍，并以 JSON 格式输出。
+
+你需要仔细识别：
+1. 书名 (title)：识别每本书的书名。
+2. 作者 (author)：识别作者名字。
+3. 简介 (description)：简短介绍该书的核心内容或背景。
+4. 封面主色调 (coverColor)：识别书脊或封面的主色调，必须为标准的 6 位 HEX 颜色代码（如 #2d6a4f, #d62246）。
+5. 行数 (row)：书架上的排数，从上到下依次为 1, 2, 3...
+6. 位置 (position)：在该排中从左到右的顺序，依次为 1, 2, 3...
+7. 估算评分 (rating)：基于书籍知名度和口碑，给出 0.0 到 10.0 之间的评分。
+
+请确保输出格式为合法的 JSON 对象，包含 "books" 数组。`);
   const [useDemoMode, setUseDemoMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('gemini_demo_mode');
+    const saved = localStorage.getItem('llm_demo_mode');
     return saved === null ? true : saved === 'true';
   });
 
@@ -53,7 +67,7 @@ function App() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [scanning, setScanning] = useState<boolean>(false);
   const [scanLogs, setScanLogs] = useState<string[]>([]);
-  const [scanResultBooks, setScanResultBooks] = useState<GeminiBookResult[]>([]);
+  const [scanResultBooks, setScanResultBooks] = useState<LLMBookResult[]>([]);
   const [isConfirmingScan, setIsConfirmingScan] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -82,11 +96,23 @@ function App() {
 
   // Update localStorage when configuration changes
   useEffect(() => {
-    localStorage.setItem('gemini_api_key', apiKey);
+    localStorage.setItem('llm_api_base', apiBaseUrl);
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    localStorage.setItem('llm_api_key', apiKey);
   }, [apiKey]);
 
   useEffect(() => {
-    localStorage.setItem('gemini_demo_mode', String(useDemoMode));
+    localStorage.setItem('llm_model', apiModelName);
+  }, [apiModelName]);
+
+  useEffect(() => {
+    localStorage.setItem('llm_prompt', customPrompt);
+  }, [customPrompt]);
+
+  useEffect(() => {
+    localStorage.setItem('llm_demo_mode', String(useDemoMode));
   }, [useDemoMode]);
 
   // Sync active shelf selector with database changes
@@ -209,7 +235,7 @@ function App() {
   const runScanning = async () => {
     if (!uploadedFile && !uploadedImage) return;
     if (!useDemoMode && !apiKey) {
-      alert('请先在设置中配置 Gemini API Key，或启用 Demo 演示模式。');
+      alert('请先在偏好设置中配置 API Key，或启用 Demo 演示模式。');
       setActiveTab('settings');
       return;
     }
@@ -221,7 +247,7 @@ function App() {
       '正在读取书架照片数据...',
       '正在分析照片边缘与书架隔板结构...',
       '正在检测书脊边框与物理顺序...',
-      '正在上传图片片段至 Gemini 多模态模型...',
+      '正在上传图片及提示词至 AI 大模型 (Chat Completions)...',
       '正在由大模型提取书名、作者与颜色版本特征...',
       '正在聚合书籍豆瓣评分与内容百科信息...'
     ];
@@ -240,7 +266,14 @@ function App() {
         blobToScan = await res.blob();
       }
 
-      const result = await scanBookshelfPhoto(blobToScan, apiKey, useDemoMode);
+      const result = await scanBookshelfPhoto(
+        blobToScan,
+        apiBaseUrl,
+        apiKey,
+        apiModelName,
+        customPrompt,
+        useDemoMode
+      );
       setScanResultBooks(result.books);
       setIsConfirmingScan(true);
     } catch (error: any) {
@@ -539,7 +572,7 @@ function App() {
             {activeTab === 'settings' && (
               <>
                 <h1>偏好设置 & 管理</h1>
-                <p>配置 Gemini API 接口，重置或清理本地数据库</p>
+                <p>配置大模型 API 接口与提示词，重置或清理本地数据库</p>
               </>
             )}
           </div>
@@ -609,7 +642,7 @@ function App() {
                     AI 智能整理指南
                   </h2>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1rem' }}>
-                    本系统使用 Google Gemini API 多模态大模型为您服务。只需上传一张完整的书架侧拍或正拍照片：
+                    本系统支持接入任意 OpenAI 兼容的多模态大模型。只需上传一张完整的书架侧拍或正拍照片：
                   </p>
                   <ul style={{ paddingLeft: '1.25rem', color: 'var(--text-muted)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     <li>自动锁定各排的排列结构（自上而下，自左向右）。</li>
@@ -1157,7 +1190,7 @@ function App() {
                 <div>
                   <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>Demo 演示模式 (推荐首次使用)</h3>
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    启用后，上传书架照片时无需调用真实 Gemini API Key，系统将自动使用预设的精美书籍数据，以便立即感受完整功能。
+                    启用后，上传书架照片时无需调用真实 API Key，系统将自动使用预设的精美书籍数据，以便立即感受完整功能。
                   </p>
                 </div>
                 <input 
@@ -1176,26 +1209,116 @@ function App() {
               ) : (
                 <div className="demo-banner inactive">
                   <Info size={16} />
-                  <span>已停用演示模式，您将直接使用 Gemini API 发送图片至 Google 云端。</span>
+                  <span>已停用演示模式，您将直接使用 OpenAI 兼容 API 发送图片。</span>
                 </div>
               )}
             </div>
 
-            {/* API Key settings */}
-            <div className="form-group" style={{ opacity: useDemoMode ? 0.5 : 1 }}>
-              <label>Gemini API Key：</label>
-              <input 
-                type="password" 
-                className="form-input" 
-                placeholder="请输入您的 Google Gemini API Key" 
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                disabled={useDemoMode}
-              />
-              <span className="form-help">
-                获取 Key 链接：<a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>Google AI Studio</a>.
-                本系统会将 Key 存在您的浏览器 LocalStorage 中，并采用直连机制，保证数据安全。
-              </span>
+            {/* API Config settings */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', opacity: useDemoMode ? 0.5 : 1 }}>
+              <h3 style={{ fontSize: '1.2rem', color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                OpenAI 兼容大模型配置
+              </h3>
+              
+              <div className="form-group">
+                <label>API Base URL：</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="https://api.openai.com/v1" 
+                  value={apiBaseUrl}
+                  onChange={(e) => setApiBaseUrl(e.target.value)}
+                  disabled={useDemoMode}
+                />
+                <span className="form-help">
+                  您的 API 提供商的基础 URL (Base URL)，例如 <code>https://api.openai.com/v1</code> 或 <code>https://api.deepseek.com/v1</code>。如果是本地运行的 Ollama，通常是 <code>http://localhost:11434/v1</code>。
+                </span>
+              </div>
+
+              <div className="form-group">
+                <label>API Key：</label>
+                <input 
+                  type="password" 
+                  className="form-input" 
+                  placeholder="请输入您的 API Key (如 sk-...)" 
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  disabled={useDemoMode}
+                />
+                <span className="form-help">
+                  用于进行 API 请求的鉴权密钥。该密钥仅保存在您的本地浏览器中，绝不会上传到任何第三方服务器。
+                </span>
+              </div>
+
+              <div className="form-group">
+                <label>模型名称 (Model Name)：</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="gpt-4o-mini" 
+                  value={apiModelName}
+                  onChange={(e) => setApiModelName(e.target.value)}
+                  disabled={useDemoMode}
+                />
+                <span className="form-help">
+                  要调用的多模态模型名称，例如 <code>gpt-4o-mini</code>, <code>gpt-4o</code>, 或本地运行的 <code>llava</code> 等。<strong>请确保所选模型支持图片输入。</strong>
+                </span>
+              </div>
+
+              <div className="form-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label>识别提示词 (Prompt)：</label>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
+                    onClick={() => {
+                      if (confirm('确定要恢复默认提示词吗？')) {
+                        setCustomPrompt(`你是一个专业的图书管理员和图像识别专家。请分析用户提供的书架照片，识别出书架上的所有书籍，并以 JSON 格式输出。
+
+你需要仔细识别：
+1. 书名 (title)：识别每本书的书名。
+2. 作者 (author)：识别作者名字。
+3. 简介 (description)：简短介绍该书的核心内容或背景。
+4. 封面主色调 (coverColor)：识别书脊或封面的主色调，必须为标准的 6 位 HEX 颜色代码（如 #2d6a4f, #d62246）。
+5. 行数 (row)：书架上的排数，从上到下依次为 1, 2, 3...
+6. 位置 (position)：在该排中从左到右的顺序，依次为 1, 2, 3...
+7. 估算评分 (rating)：基于书籍知名度和口碑，给出 0.0 到 10.0 之间的评分。
+
+请确保输出格式为合法的 JSON 对象，包含 "books" 数组。`);
+                      }
+                    }}
+                    disabled={useDemoMode}
+                  >
+                    恢复默认
+                  </button>
+                </div>
+                <textarea 
+                  className="form-input form-textarea" 
+                  style={{ height: '180px', fontFamily: 'monospace', fontSize: '0.9rem' }}
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  disabled={useDemoMode}
+                />
+                <span className="form-help">
+                  微调发送给大模型的提示词，使其按您需要的方式或特殊语言习惯识别书脊和书籍信息。
+                </span>
+              </div>
+
+              {/* CORS Warning Alert Block */}
+              <div className="demo-banner inactive" style={{ borderLeftColor: 'var(--warning)', background: 'hsla(38, 92%, 50%, 0.05)', color: 'var(--text-main)', marginTop: '0.5rem' }}>
+                <Info size={18} style={{ color: 'var(--warning)', flexShrink: 0 }} />
+                <div style={{ fontSize: '0.85rem', lineHeight: '1.5' }}>
+                  <strong>⚠️ CORS 跨域限制提示：</strong>
+                  <br />
+                  由于本应用是一个纯前端网页（运行在浏览器中），向自定义 API 地址发起请求时可能会触发浏览器的 CORS (跨域资源共享) 限制。
+                  <ul>
+                    <li><strong>本地 Ollama：</strong> 启动时请通过环境变量启用跨域，例如 Mac/Linux 下运行 <code>OLLAMA_ORIGINS="*" ollama serve</code>。</li>
+                    <li><strong>本地 LM Studio / LocalAI：</strong> 请在设置中开启“Enable CORS”选项。</li>
+                    <li><strong>在线 API / 代理：</strong> 请确保您的 API 代理提供商的服务器配置了 <code>Access-Control-Allow-Origin: *</code> 响应头。</li>
+                  </ul>
+                </div>
+              </div>
             </div>
 
             {/* DB tools */}

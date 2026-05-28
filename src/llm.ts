@@ -1,4 +1,4 @@
-export interface GeminiBookResult {
+export interface LLMBookResult {
   title: string;
   author: string;
   description: string;
@@ -8,22 +8,16 @@ export interface GeminiBookResult {
   rating: number; // Estimated rating (0.0 to 10.0)
 }
 
-export interface GeminiScanResult {
-  books: GeminiBookResult[];
+export interface LLMScanResult {
+  books: LLMBookResult[];
 }
 
-// Convert a File/Blob to Generative Part (base64 object)
-async function fileToGenerativePart(blob: Blob): Promise<{ inlineData: { data: string; mimeType: string } }> {
+// Convert a File/Blob to Base64 Data URL
+async function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
-      const base64Data = (reader.result as string).split(',')[1];
-      resolve({
-        inlineData: {
-          data: base64Data,
-          mimeType: blob.type,
-        },
-      });
+      resolve(reader.result as string);
     };
     reader.onerror = reject;
     reader.readAsDataURL(blob);
@@ -31,14 +25,17 @@ async function fileToGenerativePart(blob: Blob): Promise<{ inlineData: { data: s
 }
 
 /**
- * Scan a bookshelf photo using the Gemini API or mock data in demo mode.
+ * Scan a bookshelf photo using an OpenAI-compatible API or mock data.
  */
 export async function scanBookshelfPhoto(
   imageBlob: Blob | null,
+  apiBaseUrl: string,
   apiKey: string | null,
+  modelName: string,
+  customPrompt: string,
   useDemo: boolean
-): Promise<GeminiScanResult> {
-  if (useDemo || !apiKey || !imageBlob) {
+): Promise<LLMScanResult> {
+  if (useDemo || !imageBlob) {
     // Return mock data for Demo Mode
     await new Promise((resolve) => setTimeout(resolve, 3000)); // Simulate networking
     return {
@@ -92,78 +89,70 @@ export async function scanBookshelfPhoto(
     };
   }
 
+  if (!apiKey) {
+    throw new Error('API Key is required to perform a real scan.');
+  }
+
   try {
-    const mediaPart = await fileToGenerativePart(imageBlob);
+    const dataUrl = await blobToDataUrl(imageBlob);
 
-    const systemPrompt = `You are an expert bookshelf scanner AI. Analyze the image of the bookshelf.
-Tasks:
-1. Detect all books visible on the shelves.
-2. Group the books by shelves/rows. For each row (numbered 1, 2, 3... from top to bottom), identify the books and list them in order from LEFT to RIGHT.
-3. For each book, extract or predict:
-   - "title": Book title in Chinese or its original language.
-   - "author": Author's name.
-   - "description": A concise 1-2 sentence Chinese summary of the book.
-   - "coverColor": The dominant color of the book spine or cover, returned as a hex color code (e.g., "#E63946", "#1D3557").
-   - "row": The 1-indexed row number.
-   - "position": The 1-indexed order position on that row (left to right).
-   - "rating": The estimated Douban rating of the book (0.0 to 10.0).
-
-You must respond strictly in JSON format matching the schema:
-{
-  "books": [
-    {
-      "title": "Title",
-      "author": "Author",
-      "description": "Summary",
-      "coverColor": "#hex",
-      "row": number,
-      "position": number,
-      "rating": number
-    }
-  ]
-}`;
-
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    // Clean up base URL: remove trailing slash
+    const cleanedBaseUrl = apiBaseUrl.trim().replace(/\/+$/, '');
+    const endpoint = `${cleanedBaseUrl}/chat/completions`;
 
     const requestBody = {
-      contents: [
+      model: modelName,
+      messages: [
         {
-          parts: [
-            { text: systemPrompt },
-            mediaPart
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: customPrompt
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: dataUrl
+              }
+            }
           ]
         }
       ],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.1,
-      }
+      response_format: { type: 'json_object' },
+      temperature: 0.1
     };
 
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Gemini API error (${response.status}): ${errorText}`);
+      throw new Error(`LLM API error (${response.status}): ${errorText}`);
     }
 
     const json = await response.json();
-    const responseText = json.candidates?.[0]?.content?.parts?.[0]?.text;
+    const responseText = json.choices?.[0]?.message?.content;
 
     if (!responseText) {
-      throw new Error('No content returned from Gemini API.');
+      throw new Error('No content returned from LLM API choices.');
     }
 
-    const parsedResult: GeminiScanResult = JSON.parse(responseText);
+    const parsedResult: LLMScanResult = JSON.parse(responseText);
+    
+    if (!parsedResult.books || !Array.isArray(parsedResult.books)) {
+      throw new Error('LLM output format is invalid: expected a "books" array.');
+    }
+
     return parsedResult;
   } catch (error) {
-    console.error('Failed to scan bookshelf photo with Gemini:', error);
+    console.error('Failed to scan bookshelf photo with OpenAI-compatible LLM:', error);
     throw error;
   }
 }
