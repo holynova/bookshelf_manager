@@ -2,10 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  base: '/bookshelf_manager/',
+  base: mode === 'pages' ? '/bookshelf_manager/' : '/',
   build: {
-    outDir: 'docs'
+    outDir: process.env.BUILD_OUTPUT_DIR ?? 'dist'
   }
-})
+}))

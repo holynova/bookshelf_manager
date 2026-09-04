@@ -8,6 +8,7 @@
 ## 🌐 项目链接
 - **代码仓库 (GitHub)**: [github.com/holynova/bookshelf_manager](https://github.com/holynova/bookshelf_manager)
 - **在线体验 (GitHub Pages)**: [holynova.github.io/bookshelf_manager/](https://holynova.github.io/bookshelf_manager/)
+- **Cloudflare**: [bookshelf-manager.xiaosang.cc](https://bookshelf-manager.xiaosang.cc/)
 
 ## 🚀 核心功能
 - **拍照自动识别**：基于 Google Gemini API 多模态大模型分析书架照片，一键提取书名、著者、简介和豆瓣评分，确定书籍的物理排布与色调。
