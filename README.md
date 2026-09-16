@@ -2,6 +2,11 @@
 
 一款利用 AI 智能拍照整理物理藏书、自动建档并还原虚拟原木书架的单页面应用。
 
+<p align="center">
+  <img src="assets/readme/hero.svg" width="100%" alt="书香管家 - AI 拍照书架整理应用: 一款利用 AI 智能拍照整理物理藏书、自动建档并还原虚拟原木书架的单页面应用。">
+</p>
+
+
 ## 📸 项目截图
 ![书香管家主面板](screenshot.png)
 
