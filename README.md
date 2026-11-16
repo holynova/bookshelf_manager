@@ -1,15 +1,38 @@
-# 书香管家 - AI 拍照书架整理应用
+# 书香管家 · 家庭藏书管理器
 
-一款利用 AI 智能拍照整理物理藏书、自动建档并还原虚拟原木书架的单页面应用。
+[在线使用](https://holynova.github.io/bookshelf_manager/)
 
-## 📸 项目截图
-![书香管家主面板](screenshot.png)
+拍下书架，逐本校对，找到每一本实体书的位置。温暖的纸质书房界面，数据存储在当前浏览器。
 
-## 🌐 项目链接
-- **代码仓库 (GitHub)**: [github.com/holynova/bookshelf_manager](https://github.com/holynova/bookshelf_manager)
-- **在线体验 (GitHub Pages)**: [holynova.github.io/bookshelf_manager/](https://holynova.github.io/bookshelf_manager/)
+## 工作流
 
-## 🚀 核心功能
-- **拍照自动识别**：基于 Google Gemini API 多模态大模型分析书架照片，一键提取书名、著者、简介和豆瓣评分，确定书籍的物理排布与色调。
-- **三维虚拟书架**：逼真还原书籍摆放位置与外观。支持点击查看详情及豆瓣、微信读书、淘宝跳转。
-- **本地持久化**：使用 IndexedDB 存储，数据 100% 留存在浏览器。支持 Demo 演示免 key 体验。
+1. 上传书架照片，或直接手动录入。
+2. 配置支持图片输入与 JSON 输出的 Chat Completions 兼容接口；点击识别才会发送照片。
+3. 核对书名、作者、层数与从左向右的位置，勾选后追加到新书架或已有书架。
+4. 搜索、查看书脊 / 列表、编辑笔记、设置未读 / 在读 / 已读、查找疑似重复藏书。
+5. 定期导出 JSON 备份；导入采取事务性合并，不清空已有藏书，重复导入相同记录不会再次新增。
+
+模型返回的不确定信息会标记待补充；不再生成或展示未经来源验证的豆瓣评分。原图框选位置仅在模型提供有效 bounding box 且原图对应时显示。向已有书架追加时保留旧书架照片，不使用新照片的框选位置。
+
+## 数据兼容
+
+继续使用原有 `BookshelfDatabase` IndexedDB 数据库与表，不重建或清空旧数据。旧版 rating 字段保留但不再当作外部评分展示。首次打开不自动灌入演示数据；演示书房由用户主动加载。
+
+新填写的 API Key 仅存于当前标签页 sessionStorage，不进入备份。旧版已保存的配置可继续读取。藏书不会跨设备自动同步；清理浏览器站点数据前请导出备份。
+
+## 开发
+
+Node.js 24+：
+
+```sh
+npm ci
+npm test
+npm run build
+npm run dev
+```
+
+构建产物输出到 `docs/`，保留现有 `master:/docs` GitHub Pages 发布方式。需提交构建产物才能更新线上页面。
+
+`src/catalog.ts` 校验模型与备份数据；`src/llm.ts` 负责可取消的真实 API 请求；`src/db.ts` 保留旧数据结构。
+
+演示校对使用预置样例，不代表模型识别结果。实际模型可用性取决于你的密钥、模型能力、JSON 输出支持和服务端 CORS 配置。

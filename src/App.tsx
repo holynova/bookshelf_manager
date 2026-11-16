@@ -1,1573 +1,1379 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { 
-  Library, 
-  Plus, 
-  Search, 
-  Settings as SettingsIcon, 
-  Sun, 
-  Moon, 
-  Camera, 
-  Upload, 
-  Trash2, 
-  Edit, 
-  BookOpen, 
-  ExternalLink, 
-  Check, 
-  ArrowRight,
-  TrendingUp,
+import { useEffect, useRef, useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import {
+  BookOpen,
+  Camera,
+  Search,
+  Settings,
+  Plus,
+  ArrowUpRight,
+  Library,
+  Download,
+  Upload,
+  X,
+  Check,
+  ChevronRight,
+  Trash2,
   Bookmark,
-  Layers,
-  Sparkles,
-  Info
-} from 'lucide-react';
-import { db, seedDemoData, type Book } from './db';
-import { scanBookshelfPhoto, type LLMBookResult } from './llm';
-
-function App() {
-  // Navigation & Theme
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'shelves' | 'library' | 'scan' | 'settings'>('dashboard');
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-
-  // DB Data
-  const shelves = useLiveQuery(() => db.shelves.toArray()) || [];
-  const books = useLiveQuery(() => db.books.toArray()) || [];
-
-  // API Config (stored in localStorage)
-  const [apiBaseUrl, setApiBaseUrl] = useState<string>(() => localStorage.getItem('llm_api_base') || 'https://api.openai.com/v1');
-  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('llm_api_key') || '');
-  const [apiModelName, setApiModelName] = useState<string>(() => localStorage.getItem('llm_model') || 'gpt-4o-mini');
-  const [customPrompt, setCustomPrompt] = useState<string>(() => localStorage.getItem('llm_prompt') || `你是一个专业的图书管理员和图像识别专家。请分析用户提供的书架照片，识别出书架上的所有书籍，并以 JSON 格式输出。
-
-你需要仔细识别：
-1. 书名 (title)：识别每本书的书名。
-2. 作者 (author)：识别作者名字。
-3. 简介 (description)：简短介绍该书的核心内容或背景。
-4. 封面主色调 (coverColor)：识别书脊或封面的主色调，必须为标准的 6 位 HEX 颜色代码（如 #2d6a4f, #d62246）。
-5. 行数 (row)：书架上的排数，从上到下依次为 1, 2, 3...
-6. 位置 (position)：在该排中从左到右的顺序，依次为 1, 2, 3...
-7. 估算评分 (rating)：基于书籍知名度和口碑，给出 0.0 到 10.0 之间的评分。
-
-请确保输出格式为合法的 JSON 对象，包含 "books" 数组。`);
-  const [useDemoMode, setUseDemoMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('llm_demo_mode');
-    return saved === null ? true : saved === 'true';
-  });
-
-  // Selected State
-  const [activeShelfId, setActiveShelfId] = useState<number | null>(null);
-  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
-  const [editingBook, setEditingBook] = useState<Book | null>(null);
-
-  // Scan & Upload Flow
-  const [scanShelfId, setScanShelfId] = useState<string>('new');
-  const [newShelfName, setNewShelfName] = useState<string>('');
-  const [newShelfDesc, setNewShelfDesc] = useState<string>('');
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [scanning, setScanning] = useState<boolean>(false);
-  const [scanLogs, setScanLogs] = useState<string[]>([]);
-  const [scanResultBooks, setScanResultBooks] = useState<LLMBookResult[]>([]);
-  const [isConfirmingScan, setIsConfirmingScan] = useState<boolean>(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Library Filters & Search
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filterShelfId, setFilterShelfId] = useState<string>('all');
-  const [filterDigitized, setFilterDigitized] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<string>('rating-desc');
-
-  // Initialize: Set HTML data-theme attribute and seed demo data on first launch
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
-
-  useEffect(() => {
-    const initDb = async () => {
-      await seedDemoData();
-      // Set the first shelf as active by default if none is set
-      const allShelves = await db.shelves.toArray();
-      if (allShelves.length > 0 && activeShelfId === null) {
-        setActiveShelfId(allShelves[0].id || null);
-      }
-    };
-    initDb();
-  }, []);
-
-  // Update localStorage when configuration changes
-  useEffect(() => {
-    localStorage.setItem('llm_api_base', apiBaseUrl);
-  }, [apiBaseUrl]);
-
-  useEffect(() => {
-    localStorage.setItem('llm_api_key', apiKey);
-  }, [apiKey]);
-
-  useEffect(() => {
-    localStorage.setItem('llm_model', apiModelName);
-  }, [apiModelName]);
-
-  useEffect(() => {
-    localStorage.setItem('llm_prompt', customPrompt);
-  }, [customPrompt]);
-
-  useEffect(() => {
-    localStorage.setItem('llm_demo_mode', String(useDemoMode));
-  }, [useDemoMode]);
-
-  // Sync active shelf selector with database changes
-  useEffect(() => {
-    if (shelves.length > 0 && activeShelfId === null) {
-      setActiveShelfId(shelves[0].id || null);
-    }
-  }, [shelves]);
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
-
-  // --- STATS CALCULATIONS ---
-  const stats = useMemo(() => {
-    if (books.length === 0) {
-      return { total: 0, digitized: 0, ratio: 0, avgRating: 0 };
-    }
-    const total = books.length;
-    const digitized = books.filter(b => b.isDigitized).length;
-    const ratio = Math.round((digitized / total) * 100);
-    
-    const ratedBooks = books.filter(b => b.rating > 0);
-    const avgRating = ratedBooks.length > 0
-      ? Number((ratedBooks.reduce((sum, b) => sum + b.rating, 0) / ratedBooks.length).toFixed(1))
-      : 0;
-
-    return { total, digitized, ratio, avgRating };
-  }, [books]);
-
-  // --- FILTERED BOOKS ---
-  const filteredBooks = useMemo(() => {
-    let result = [...books];
-
-    // Search
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(b => 
-        b.title.toLowerCase().includes(q) || 
-        b.author.toLowerCase().includes(q) || 
-        b.description.toLowerCase().includes(q)
-      );
-    }
-
-    // Shelf Filter
-    if (filterShelfId !== 'all') {
-      result = result.filter(b => b.shelfId === Number(filterShelfId));
-    }
-
-    // Digitized Filter
-    if (filterDigitized !== 'all') {
-      const isDig = filterDigitized === 'yes';
-      result = result.filter(b => b.isDigitized === isDig);
-    }
-
-    // Sorting
-    result.sort((a, b) => {
-      if (sortBy === 'title-asc') return a.title.localeCompare(b.title);
-      if (sortBy === 'title-desc') return b.title.localeCompare(a.title);
-      if (sortBy === 'rating-desc') return b.rating - a.rating;
-      if (sortBy === 'rating-asc') return a.rating - b.rating;
-      if (sortBy === 'position') {
-        if (a.shelfId !== b.shelfId) return a.shelfId - b.shelfId;
-        if (a.row !== b.row) return a.row - b.row;
-        return a.position - b.position;
-      }
-      return b.createdAt - a.createdAt; // Default to newest
-    });
-
+} from "lucide-react";
+import { db, seedDemoData, type Book } from "./db";
+import { identity, validateBackup, type Candidate } from "./catalog";
+import { scanBookshelfPhoto } from "./llm";
+import "./App.css";
+const statusNames: Record<string, string> = {
+  unread: "未读",
+  reading: "在读",
+  done: "已读",
+};
+const newCandidate = (): Candidate => ({
+  title: "",
+  author: "",
+  description: "",
+  coverColor: "#526b58",
+  row: 1,
+  position: 1,
+  confidence: "low",
+});
+function bookInk(color: string) {
+  const rgb = /^#[0-9a-f]{6}$/i.test(color) ? color.slice(1).match(/../g)!.map(v => parseInt(v, 16)) : [70, 90, 60];
+  return rgb[0] * .299 + rgb[1] * .587 + rgb[2] * .114 > 165 ? "#2b3b29" : "#fffcef";
+}
+function download(blob: Blob, name: string) {
+  const u = URL.createObjectURL(blob),
+    a = document.createElement("a");
+  a.href = u;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(u), 10000);
+}
+async function photoFile(file: File): Promise<string> {
+  if (!file.type.startsWith("image/"))
+    throw new Error("请选择 JPG、PNG 或 WebP 照片。");
+  if (file.size > 25 * 1024 * 1024)
+    throw new Error("照片请控制在 25 MB 以内。");
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const scale = Math.min(1, 2000 / Math.max(image.width, image.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(image.width * scale);
+    c.height = Math.round(image.height * scale);
+    c.getContext("2d")!.drawImage(image, 0, 0, c.width, c.height);
+    const result = c.toDataURL("image/jpeg", 0.86);
+    c.width = c.height = 0;
     return result;
-  }, [books, searchQuery, filterShelfId, filterDigitized, sortBy]);
-
-  // --- SCAN PROCESSING ---
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setUploadedFile(file);
-      const reader = new FileReader();
-      reader.onload = () => {
-        setUploadedImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      setUploadedFile(file);
-      const reader = new FileReader();
-      reader.onload = () => {
-        setUploadedImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const triggerFileSelect = () => {
-    fileInputRef.current?.click();
-  };
-
-  const loadDemoImageForScan = async () => {
-    setUploadedImage('/demo_bookshelf.jpg');
-    // Load mock file
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+export default function App() {
+  const shelves = useLiveQuery(() => db.shelves.toArray()) || [],
+    books = useLiveQuery(() => db.books.toArray()) || [];
+  const [tab, setTab] = useState<"library" | "scan" | "settings">("library"),
+    [shelf, setShelf] = useState("all"),
+    [query, setQuery] = useState(""),
+    [filter, setFilter] = useState("all"),
+    [view, setView] = useState<"shelf" | "list">("shelf"),
+    [selected, setSelected] = useState<number | null>(null),
+    [edit, setEdit] = useState<Book | null>(null),
+    [notice, setNotice] = useState(""),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(""),
+    [deleted, setDeleted] = useState<Book | null>(null);
+  const [photo, setPhoto] = useState(""),
+    [candidates, setCandidates] = useState<Candidate[]>([]),
+    [checked, setChecked] = useState<number[]>([]),
+    [focused, setFocused] = useState(0),
+    [target, setTarget] = useState("new"),
+    [shelfName, setShelfName] = useState(""),
+    [shelfDesc, setShelfDesc] = useState(""),
+    [demo, setDemo] = useState(false);
+  const [base, setBase] = useState(
+      () => localStorage.getItem("llm_api_base") || "https://api.openai.com/v1",
+    ),
+    [model, setModel] = useState(() => localStorage.getItem("llm_model") || ""),
+    [key, setKey] = useState(
+      () =>
+        sessionStorage.getItem("bookshelf_key") ||
+        localStorage.getItem("llm_api_key") ||
+        "",
+    );
+  const photoInput = useRef<HTMLInputElement>(null),
+    backupInput = useRef<HTMLInputElement>(null),
+    abort = useRef<AbortController | null>(null),
+    dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => {
+    if (edit) dialog.current?.showModal();
+    else dialog.current?.close();
+  }, [edit?.id, !!edit]);
+  const keys = books.reduce((m, b) => {
+    const k = identity(b.title, b.author);
+    m.set(k, (m.get(k) || 0) + 1);
+    return m;
+  }, new Map<string, number>());
+  const visible = books
+    .filter(
+      (b) =>
+        (shelf === "all" || b.shelfId === +shelf) &&
+        `${b.title} ${b.author} ${b.notes || ""}`
+          .toLowerCase()
+          .includes(query.toLowerCase()) &&
+        (filter === "all" ||
+          (filter === "duplicate" &&
+            (keys.get(identity(b.title, b.author)) || 0) > 1) ||
+          (filter === "unconfirmed" && !b.isDigitized) ||
+          (b.readingStatus || "unread") === filter),
+    )
+    .sort(
+      (a, b) =>
+        a.shelfId - b.shelfId || a.row - b.row || a.position - b.position,
+    );
+  const book = books.find((b) => b.id === selected),
+    bookShelf = shelves.find((s) => s.id === book?.shelfId);
+  const guard = async (fn: () => Promise<void>) => {
+    setError("");
     try {
-      const response = await fetch('/demo_bookshelf.jpg');
-      const blob = await response.blob();
-      const file = new File([blob], 'demo_bookshelf.jpg', { type: 'image/jpeg' });
-      setUploadedFile(file);
+      await fn();
     } catch (e) {
-      console.error('Failed to load demo file', e);
+      setError(e instanceof Error ? e.message : "操作失败，请重试。");
     }
   };
-
-  const runScanning = async () => {
-    if (!uploadedFile && !uploadedImage) return;
-    if (!useDemoMode && !apiKey) {
-      alert('请先在偏好设置中配置 API Key，或启用 Demo 演示模式。');
-      setActiveTab('settings');
-      return;
-    }
-
-    setScanning(true);
-    setScanLogs([]);
-
-    const logMessages = [
-      '正在读取书架照片数据...',
-      '正在分析照片边缘与书架隔板结构...',
-      '正在检测书脊边框与物理顺序...',
-      '正在上传图片及提示词至 AI 大模型 (Chat Completions)...',
-      '正在由大模型提取书名、作者与颜色版本特征...',
-      '正在聚合书籍豆瓣评分与内容百科信息...'
-    ];
-
-    // Simulate logs appearing over time
-    for (let i = 0; i < logMessages.length; i++) {
-      setScanLogs(prev => [...prev, logMessages[i]]);
-      await new Promise(r => setTimeout(r, 600));
-    }
-
-    try {
-      // If we are scanning a real file, use it. Otherwise, fetch the image from URL (like the demo path)
-      let blobToScan: Blob | null = uploadedFile;
-      if (!blobToScan && uploadedImage) {
-        const res = await fetch(uploadedImage);
-        blobToScan = await res.blob();
+  function startScan() {
+    setTab("scan");
+    setSelected(null);
+  }
+  async function image(file?: File) {
+    if (!file || busy) return;
+    await guard(async () => {
+      setBusy("正在准备照片");
+      try {
+        setPhoto(await photoFile(file));
+        setCandidates([]);
+        setChecked([]);
+        setDemo(false);
+      } finally {
+        setBusy("");
       }
-
-      const result = await scanBookshelfPhoto(
-        blobToScan,
-        apiBaseUrl,
-        apiKey,
-        apiModelName,
-        customPrompt,
-        useDemoMode
+    });
+    if (photoInput.current) photoInput.current.value = "";
+  }
+  async function scan() {
+    await guard(async () => {
+      if (!photo) throw new Error("请先上传书架照片。");
+      if (!key || !model)
+        throw new Error(
+          "请先在模型设置中填写接口、模型和 API Key，或使用演示校对。",
+        );
+      const c = new AbortController();
+      abort.current = c;
+      const timeout = setTimeout(() => c.abort(), 90000);
+      setBusy("正在识别照片，请稍候");
+      setDemo(false);
+      try {
+        const result = await scanBookshelfPhoto(
+          photo,
+          base,
+          key,
+          model,
+          c.signal,
+        );
+        setCandidates(result.books);
+        setChecked([]);
+        setFocused(0);
+      } catch (e) {
+        if (c.signal.aborted) throw new Error("识别已取消或超时，请重试。");
+        throw e;
+      } finally {
+        clearTimeout(timeout);
+        setBusy("");
+        abort.current = null;
+      }
+    });
+  }
+  async function demoReview() {
+    await guard(async () => {
+      const response = await fetch(
+        import.meta.env.BASE_URL + "demo_bookshelf.jpg",
       );
-      setScanResultBooks(result.books);
-      setIsConfirmingScan(true);
-    } catch (error: any) {
-      alert(`扫描识别失败: ${error?.message || error}`);
-    } finally {
-      setScanning(false);
-    }
-  };
-
-  const handleSaveScanResult = async () => {
-    let targetShelfId: number;
-
-    if (scanShelfId === 'new') {
-      if (!newShelfName.trim()) {
-        alert('请输入新书架名称');
-        return;
-      }
-      const addedId = await db.shelves.add({
-        name: newShelfName.trim(),
-        description: newShelfDesc.trim(),
-        photoUrl: uploadedImage || undefined,
-        createdAt: Date.now()
+      if (!response.ok) throw new Error("演示照片加载失败。");
+      const f = new File([await response.blob()], "demo.jpg", {
+        type: "image/jpeg",
       });
-      targetShelfId = addedId as number;
-    } else {
-      targetShelfId = Number(scanShelfId);
-      // Update existing shelf's photo if provided
-      if (uploadedImage) {
-        await db.shelves.update(targetShelfId, {
-          photoUrl: uploadedImage
+      setPhoto(await photoFile(f));
+      setDemo(true);
+      setCandidates([
+        {
+          ...newCandidate(),
+          title: "三体",
+          author: "刘慈欣",
+          coverColor: "#334a52",
+          confidence: "high",
+        },
+        {
+          ...newCandidate(),
+          title: "人类简史",
+          author: "尤瓦尔·赫拉利",
+          position: 2,
+          coverColor: "#b99e71",
+          confidence: "medium",
+        },
+        {
+          ...newCandidate(),
+          title: "待确认书名",
+          position: 3,
+          confidence: "low",
+        },
+      ]);
+      setChecked([]);
+      setFocused(0);
+      setShelfName("演示书架");
+      setNotice("这是预置校对示例，未经模型识别；书名和位置不保证与照片对应。");
+    });
+  }
+  function patch(i: number, p: Partial<Candidate>) {
+    setCandidates((c) => c.map((b, j) => (j === i ? { ...b, ...p } : b)));
+  }
+  async function saveCandidates() {
+    if (busy) return;
+    await guard(async () => {
+      if (!checked.length) throw new Error("请勾选已核对的书籍。");
+      if (target === "new" && !shelfName.trim())
+        throw new Error("给新书架起个名字。");
+      const chosen = candidates.filter((_, i) => checked.includes(i));
+      if (
+        chosen.some(
+          (b) =>
+            !b.title.trim() ||
+            b.title === "待确认书名" ||
+            !Number.isInteger(b.row) ||
+            b.row < 1 ||
+            b.row > 100 ||
+            !Number.isInteger(b.position) ||
+            b.position < 1 ||
+            b.position > 100,
+        )
+      )
+        throw new Error("请补全书名，层数与位置需为 1–100 的整数。");
+      setBusy("正在保存");
+      try {
+        let sid = 0;
+        await db.transaction("rw", db.shelves, db.books, async () => {
+          sid =
+            target === "new"
+              ? Number(
+                  await db.shelves.add({
+                    name: shelfName.trim(),
+                    description: shelfDesc.trim(),
+                    photoUrl: photo || undefined,
+                    createdAt: Date.now(),
+                  }),
+                )
+              : +target;
+          if (!(await db.shelves.get(sid)))
+            throw new Error("目标书架已不存在。");
+          for (const b of chosen) {
+            await db.books.add({
+              ...b,
+              bbox: target === "new" ? b.bbox : undefined,
+              title: b.title.trim(),
+              shelfId: sid,
+              rating: 0,
+              doubanLink: "",
+              wereadLink: "",
+              taobaoLink: "",
+              isDigitized: true,
+              readingStatus: "unread",
+              createdAt: Date.now(),
+            });
+          }
         });
+        setNotice(`已添加 ${chosen.length} 本书，原有藏书全部保留。`);
+        setCandidates([]);
+        setChecked([]);
+        setPhoto("");
+        setShelf(String(sid));
+        setTab("library");
+      } finally {
+        setBusy("");
       }
-      
-      // If rescanning/updating existing shelf, delete previous books on this shelf
-      // or archive them. Here we overwrite the location mapping.
-      const existingBooks = await db.books.where('shelfId').equals(targetShelfId).toArray();
-      await db.books.bulkDelete(existingBooks.map(b => b.id!));
-    }
-
-    // Add new books
-    const booksToInsert: Omit<Book, 'id'>[] = scanResultBooks.map(b => ({
-      shelfId: targetShelfId,
-      row: b.row,
-      position: b.position,
-      title: b.title,
-      author: b.author,
-      description: b.description,
-      coverColor: b.coverColor,
-      rating: b.rating,
-      doubanLink: `https://search.douban.com/book/subject_search?search_text=${encodeURIComponent(b.title)}`,
-      wereadLink: `https://weread.qq.com/web/search/query?keywords=${encodeURIComponent(b.title)}`,
-      taobaoLink: `https://s.taobao.com/search?q=${encodeURIComponent(b.title)}`,
-      isDigitized: true,
-      createdAt: Date.now()
-    }));
-
-    await db.books.bulkAdd(booksToInsert as Book[]);
-
-    // Reset scan state
-    setUploadedImage(null);
-    setUploadedFile(null);
-    setScanResultBooks([]);
-    setIsConfirmingScan(false);
-    setNewShelfName('');
-    setNewShelfDesc('');
-    
-    // Navigate to Virtual Shelf
-    setActiveShelfId(targetShelfId);
-    setActiveTab('shelves');
-  };
-
-  // --- BOOK CRUD ACTIONS ---
-  const toggleBookDigitized = async (book: Book) => {
-    if (!book.id) return;
-    await db.books.update(book.id, {
-      isDigitized: !book.isDigitized
     });
-    // Sync active details if open
-    if (selectedBook && selectedBook.id === book.id) {
-      setSelectedBook(prev => prev ? { ...prev, isDigitized: !prev.isDigitized } : null);
-    }
-  };
-
-  const handleUpdateBookDetails = async (e: React.FormEvent) => {
+  }
+  async function backup() {
+    await guard(async () => {
+      const ss = await db.shelves.toArray(),
+        bb = await db.books.toArray();
+      const safe = ss.map((s) => ({
+        ...s,
+        photoUrl: s.photoUrl?.startsWith("data:image/")
+          ? s.photoUrl
+          : undefined,
+      }));
+      download(
+        new Blob(
+          [
+            JSON.stringify(
+              {
+                format: "bookshelf-studio",
+                version: 2,
+                exportedAt: new Date().toISOString(),
+                shelves: safe,
+                books: bb,
+              },
+              null,
+              2,
+            ),
+          ],
+          { type: "application/json" },
+        ),
+        `bookshelf-${new Date().toISOString().slice(0, 10)}.json`,
+      );
+      setNotice("备份已导出，不包含 API Key。");
+    });
+  }
+  async function restore(file?: File) {
+    if (!file || busy) return;
+    await guard(async () => {
+      if (file.size > 100 * 1024 * 1024)
+        throw new Error("备份文件请控制在 100 MB 以内。");
+      const data = validateBackup(JSON.parse(await file.text()));
+      setBusy("正在合并备份");
+      let added = 0;
+      try {
+        await db.transaction("rw", db.shelves, db.books, async () => {
+          const mapping = new Map<number, number>();
+          for (const s of data.shelves) {
+            const existing = (await db.shelves.toArray()).find(
+              (x) => x.name === s.name && x.createdAt === s.createdAt,
+            );
+            const { id, ...rest } = s;
+            mapping.set(id, existing?.id || Number(await db.shelves.add(rest)));
+          }
+          for (const b of data.books) {
+            const shelfId = mapping.get(b.shelfId)!;
+            const matches = await db.books
+              .where("shelfId")
+              .equals(shelfId)
+              .toArray();
+            if (
+              matches.some(
+                (x) =>
+                  x.createdAt === b.createdAt &&
+                  identity(x.title, x.author) === identity(b.title, b.author),
+              )
+            )
+              continue;
+            await db.books.add({
+              ...b,
+              shelfId,
+              rating: 0,
+              doubanLink: "",
+              wereadLink: "",
+              taobaoLink: "",
+            });
+            added++;
+          }
+        });
+        setNotice(`备份已合并，新增 ${added} 本；重复导入不会覆盖已有数据。`);
+      } finally {
+        setBusy("");
+      }
+    });
+    if (backupInput.current) backupInput.current.value = "";
+  }
+  async function saveEdit(e: React.FormEvent) {
     e.preventDefault();
-    if (!editingBook || !editingBook.id) return;
-
-    await db.books.update(editingBook.id, {
-      title: editingBook.title,
-      author: editingBook.author,
-      description: editingBook.description,
-      rating: Number(editingBook.rating),
-      coverColor: editingBook.coverColor,
-      row: Number(editingBook.row),
-      position: Number(editingBook.position)
-    });
-
-    // Update local modal view
-    setSelectedBook(editingBook);
-    setEditingBook(null);
-  };
-
-  const handleDeleteBook = async (bookId: number) => {
-    if (confirm('确定要删除这本书籍的记录吗？此操作不可逆。')) {
-      await db.books.delete(bookId);
-      setSelectedBook(null);
-    }
-  };
-
-  const handleClearDatabase = async () => {
-    if (confirm('警告：确定要清空所有书架和书籍数据吗？')) {
-      await db.shelves.clear();
-      await db.books.clear();
-      setActiveShelfId(null);
-      alert('数据库已清空');
-    }
-  };
-
-  const handleResetDemoData = async () => {
-    if (confirm('确定要重置并加载初始演示数据吗？这会清空当前的数据。')) {
-      await db.shelves.clear();
-      await db.books.clear();
-      await seedDemoData();
-      const allShelves = await db.shelves.toArray();
-      if (allShelves.length > 0) {
-        setActiveShelfId(allShelves[0].id || null);
+    if (!edit) return;
+    await guard(async () => {
+      if (
+        !edit.title.trim() ||
+        edit.row < 1 ||
+        edit.position < 1 ||
+        !Number.isInteger(edit.row) ||
+        !Number.isInteger(edit.position)
+      )
+        throw new Error("请填写书名和有效位置。");
+      const payload = { ...edit, title: edit.title.trim() };
+      if (edit.id) await db.books.put(payload);
+      else {
+        if (!(await db.shelves.get(edit.shelfId)))
+          throw new Error("请先创建一个书架。");
+        await db.books.add(payload);
       }
-      alert('演示数据已重置加载！');
-    }
-  };
-
-  // Render Helper: Star Ratings
-  const renderStars = (rating: number) => {
-    const starCount = Math.round(rating / 2);
-    return (
-      <span style={{ color: 'var(--warning)', fontWeight: 600 }}>
-        {'★'.repeat(starCount)}{'☆'.repeat(5 - starCount)}
-        <span style={{ fontSize: '0.8rem', marginLeft: '0.25rem', color: 'var(--text-muted)' }}>
-          ({rating})
-        </span>
-      </span>
-    );
-  };
-
-  // Render Helper: Visual Bookshelf Row
-  const renderVisualRow = (rowNum: number, rowBooks: Book[]) => {
-    // Generate height variance based on index/ID for organic natural feeling
-    const getBookStyles = (book: Book, index: number) => {
-      const idSeed = book.id || index;
-      const height = 135 + ((idSeed * 17) % 45); // Height: 135px to 180px
-      const width = 26 + ((idSeed * 7) % 20);    // Width: 26px to 46px
-      const tilt = (idSeed % 11 === 0) ? ((idSeed % 3) - 1) * 3 : 0; // Slight tilt for every 11th book
-      
-      return {
-        height: `${height}px`,
-        width: `${width}px`,
-        backgroundColor: book.coverColor,
-        transform: tilt ? `rotate(${tilt}deg)` : undefined,
-        borderLeft: `3px solid rgba(255,255,255,${book.isDigitized ? 0.2 : 0.05})`
-      };
-    };
-
-    return (
-      <div className="shelf-row" key={rowNum}>
-        {rowBooks.length === 0 ? (
-          <div className="empty-shelf-row">该排暂无书脊记录，请上传照片扫描</div>
-        ) : (
-          rowBooks.map((book, idx) => (
-            <div 
-              className="book-spine" 
-              key={book.id || idx} 
-              style={getBookStyles(book, idx)}
-              title={`${book.title} - ${book.author}`}
-              onClick={() => setSelectedBook(book)}
-            >
-              <div className="book-spine-inner">
-                {book.title}
-              </div>
-            </div>
-          ))
-        )}
-        <div className="shelf-row-label">第 {rowNum} 排</div>
-      </div>
-    );
-  };
-
+      setEdit(null);
+      setNotice("书籍已保存。");
+    });
+  }
+  function manual() {
+    setDemo(false);
+    setCandidates([newCandidate()]);
+    setChecked([]);
+    setPhoto("");
+    setTab("scan");
+    setFocused(0);
+  }
   return (
-    <div className="app-container">
-      {/* SIDEBAR NAVIGATION */}
+    <div className="shell">
       <aside className="sidebar">
-        <div>
-          <div className="logo-container">
-            <div className="logo-icon">
-              <BookOpen size={22} />
-            </div>
-            <div>
-              <h2 className="logo-text">
-                书香管家 <span className="logo-tag">V1.0</span>
-              </h2>
-            </div>
-          </div>
-
-          <nav className="nav-links">
-            <button 
-              className={`nav-button ${activeTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => setActiveTab('dashboard')}
-            >
-              <TrendingUp size={18} />
-              数据大盘
-            </button>
-            <button 
-              className={`nav-button ${activeTab === 'shelves' ? 'active' : ''}`}
-              onClick={() => setActiveTab('shelves')}
-            >
-              <Layers size={18} />
-              虚拟书架
-            </button>
-            <button 
-              className={`nav-button ${activeTab === 'library' ? 'active' : ''}`}
-              onClick={() => setActiveTab('library')}
-            >
-              <Library size={18} />
-              书籍档案
-            </button>
-            <button 
-              className={`nav-button ${activeTab === 'scan' ? 'active' : ''}`}
-              onClick={() => setActiveTab('scan')}
-            >
-              <Camera size={18} />
-              扫描整理
-            </button>
-          </nav>
-        </div>
-
-        <div className="sidebar-footer">
-          <button 
-            className={`nav-button ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('settings')}
+        <a className="brand" href="./">
+          <BookOpen size={26} />
+          <span>
+            书香管家<small>A HOME FOR EVERY BOOK</small>
+          </span>
+        </a>
+        <div className="nav-heading">我的书房</div>
+        <nav>
+          <button
+            className={tab === "library" ? "active" : ""}
+            onClick={() => setTab("library")}
           >
-            <SettingsIcon size={18} />
-            偏好设置
+            <Library size={18} />
+            藏书与书架<span>{books.length}</span>
           </button>
-          <a 
-            href="https://github.com/holynova/bookshelf_manager" 
-            target="_blank" 
-            rel="noreferrer" 
-            className="nav-button"
-            style={{ textDecoration: 'none' }}
+          <button
+            className={tab === "scan" ? "active" : ""}
+            onClick={startScan}
           >
-            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-              <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-            </svg>
-            项目源码
-          </a>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 0.5rem' }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>
-              {theme === 'dark' ? '深色模式' : '浅色模式'}
-            </span>
-            <button className="theme-toggle-btn" onClick={toggleTheme}>
-              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            <Camera size={18} />
+            拍照整理
+          </button>
+        </nav>
+        <div className="shelf-nav">
+          <div className="nav-heading">书架位置</div>
+          <button
+            className={shelf === "all" ? "chosen" : ""}
+            onClick={() => {
+              setShelf("all");
+              setTab("library");
+            }}
+          >
+            所有书架 <span>{shelves.length}</span>
+          </button>
+          {shelves.map((s) => (
+            <button
+              key={s.id}
+              className={shelf === String(s.id) ? "chosen" : ""}
+              onClick={() => {
+                setShelf(String(s.id));
+                setTab("library");
+              }}
+            >
+              <span className="shelf-dot" />
+              {s.name}
+              <small>{books.filter((b) => b.shelfId === s.id).length}</small>
             </button>
+          ))}
+        </div>
+        <div className="sidebar-bottom">
+          <div className="small-quote">
+            书有归处，
+            <br />
+            心有余闲。
           </div>
+          <button
+            className={tab === "settings" ? "active" : ""}
+            onClick={() => setTab("settings")}
+          >
+            <Settings size={16} />
+            模型与备份
+          </button>
+          <a
+            href="https://github.com/holynova/bookshelf_manager"
+            target="_blank"
+            rel="noreferrer"
+          >
+            项目源码 <ArrowUpRight size={13} />
+          </a>
+          <span className="local">● 藏书保存在当前浏览器</span>
         </div>
       </aside>
-
-      {/* MAIN CONTAINER WORKSPACE */}
-      <main className="main-workspace">
-        
-        {/* HEADER SECTION */}
-        <header className="workspace-header">
-          <div className="header-title-section">
-            {activeTab === 'dashboard' && (
-              <>
-                <h1>您的数字化书斋</h1>
-                <p>利用人工智能扫描整理您的物理藏书，构建书籍索引</p>
-              </>
-            )}
-            {activeTab === 'shelves' && (
-              <>
-                <h1>书架虚拟视窗</h1>
-                <p>还原书籍在物理空间中的排列位置与外观色调</p>
-              </>
-            )}
-            {activeTab === 'library' && (
-              <>
-                <h1>藏书电子档案</h1>
-                <p>查询、检索、排序和归档您的电子化书籍档案</p>
-              </>
-            )}
-            {activeTab === 'scan' && (
-              <>
-                <h1>AI 拍照扫描整理</h1>
-                <p>上传或拍摄一张书架的正面照片，自动识别排布与封面颜色</p>
-              </>
-            )}
-            {activeTab === 'settings' && (
-              <>
-                <h1>偏好设置 & 管理</h1>
-                <p>配置大模型 API 接口与提示词，重置或清理本地数据库</p>
-              </>
-            )}
+      <main>
+        <header className="header">
+          <div className="breadcrumb">
+            我的书房 <ChevronRight size={13} />
+            {tab === "library"
+              ? "藏书与书架"
+              : tab === "scan"
+                ? "拍照整理"
+                : "模型与备份"}
           </div>
-
-          <div className="header-actions">
-            {activeTab !== 'scan' && (
-              <button className="btn btn-primary" onClick={() => {
-                setScanShelfId(shelves[0]?.id ? String(shelves[0].id) : 'new');
-                setActiveTab('scan');
-              }}>
-                <Plus size={16} />
-                扫描新书架
+          <span className="header-date">BOOKSHELF / VOL. 02</span>
+        </header>
+        {(notice || error) && (
+          <div
+            className={`notice ${error ? "error" : ""}`}
+            role={error ? "alert" : "status"}
+          >
+            {error || notice}
+            <button
+              onClick={() => {
+                setError("");
+                setNotice("");
+              }}
+              aria-label="关闭消息"
+            >
+              <X size={15} />
+            </button>
+            {deleted && (
+              <button
+                onClick={() =>
+                  guard(async () => {
+                    await db.books.put(deleted);
+                    setDeleted(null);
+                    setNotice("已恢复书籍。");
+                  })
+                }
+              >
+                撤销删除
               </button>
             )}
           </div>
-        </header>
-
-        {/* --- VIEW: DASHBOARD --- */}
-        {activeTab === 'dashboard' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            {/* Stats Summary Cards */}
-            <div className="stats-grid">
-              <div className="card stat-card">
-                <div className="stat-info">
-                  <h3>物理书架数</h3>
-                  <div className="stat-value">{shelves.length} 个</div>
-                </div>
-                <div className="stat-icon">
-                  <Layers size={22} />
-                </div>
-              </div>
-              <div className="card stat-card">
-                <div className="stat-info">
-                  <h3>总藏书量</h3>
-                  <div className="stat-value">{stats.total} 本</div>
-                </div>
-                <div className="stat-icon">
-                  <Bookmark size={22} />
-                </div>
-              </div>
-              <div className="card stat-card">
-                <div className="stat-info">
-                  <h3>已归档比例</h3>
-                  <div className="stat-value">{stats.ratio}%</div>
-                </div>
-                <div className="stat-icon" style={{ backgroundColor: 'var(--success-light)', color: 'var(--success)' }}>
-                  <Check size={22} />
-                </div>
-              </div>
-              <div className="card stat-card">
-                <div className="stat-info">
-                  <h3>馆藏均分</h3>
-                  <div className="stat-value">⭐ {stats.avgRating}</div>
-                </div>
-                <div className="stat-icon" style={{ backgroundColor: 'hsla(38, 92%, 50%, 0.15)', color: 'var(--warning)' }}>
-                  <Sparkles size={22} />
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Actions & Introduction */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-              <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', justifyContent: 'space-between' }}>
-                <div>
-                  <h2 style={{ fontSize: '1.4rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Sparkles size={20} style={{ color: 'var(--primary)' }} />
-                    AI 智能整理指南
-                  </h2>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1rem' }}>
-                    本系统支持接入任意 OpenAI 兼容的多模态大模型。只需上传一张完整的书架侧拍或正拍照片：
-                  </p>
-                  <ul style={{ paddingLeft: '1.25rem', color: 'var(--text-muted)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <li>自动锁定各排的排列结构（自上而下，自左向右）。</li>
-                    <li>识别书籍的名称与作者，估计豆瓣评分并附赠链接。</li>
-                    <li>抽取封面脊梁主色调，渲染三维虚拟书架，点对点找书更直观。</li>
-                  </ul>
-                </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <button className="btn btn-primary" onClick={() => setActiveTab('scan')}>
-                    拍摄/上传书架
-                    <ArrowRight size={16} />
-                  </button>
-                  {useDemoMode && (
-                    <button className="btn btn-secondary" onClick={() => {
-                      setUseDemoMode(true);
-                      setScanShelfId('new');
-                      loadDemoImageForScan();
-                      setActiveTab('scan');
-                    }}>
-                      体验 Demo 演示
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Recent Additions Card */}
-              <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <h2 style={{ fontSize: '1.4rem' }}>最新扫描录入</h2>
-                {books.length === 0 ? (
-                  <div style={{ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-light)', fontStyle: 'italic' }}>
-                    暂无藏书数据。请在“扫描整理”中上传照片。
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {books.slice(-4).reverse().map((book, idx) => (
-                      <div 
-                        key={book.id || idx} 
-                        className="scan-book-item-card" 
-                        style={{ cursor: 'pointer', background: 'rgba(0,0,0,0.02)' }}
-                        onClick={() => setSelectedBook(book)}
-                      >
-                        <div className="scan-book-item-color" style={{ backgroundColor: book.coverColor, width: '20px', height: '32px' }} />
-                        <div style={{ flexGrow: 1 }}>
-                          <h4 style={{ fontSize: '0.95rem', fontWeight: 600 }}>{book.title}</h4>
-                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{book.author}</p>
-                        </div>
-                        <span style={{ fontSize: '0.8rem', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
-                          Row {book.row}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
         )}
-
-        {/* --- VIEW: VIRTUAL SHELVES --- */}
-        {activeTab === 'shelves' && (
-          <div>
-            {shelves.length === 0 ? (
-              <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-                <Layers size={48} style={{ color: 'var(--text-light)', marginBottom: '1.5rem' }} />
-                <h2 style={{ marginBottom: '0.5rem' }}>暂无虚拟书架</h2>
-                <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-                  您还没有创建书架档案。请使用扫描整理上传图片，AI 将自动分析并创建您的第一个书架。
-                </p>
-                <button className="btn btn-primary" onClick={() => setActiveTab('scan')}>
-                  立即扫描书架
+        {tab === "library" ? (
+          <>
+            <section className="page-title">
+              <div>
+                <div className="eyebrow">YOUR PERSONAL LIBRARY</div>
+                <h1>每一本书，都找得到。</h1>
+                <p>记住你读过的世界，也记住它们在书架上的位置。</p>
+              </div>
+              <button className="primary" onClick={startScan}>
+                <Camera size={16} />
+                拍照添加
+              </button>
+            </section>
+            <div className="stats">
+              <div>
+                <strong>{books.length.toString().padStart(2, "0")}</strong>
+                <span>本藏书</span>
+              </div>
+              <div>
+                <strong>{shelves.length.toString().padStart(2, "0")}</strong>
+                <span>个书架</span>
+              </div>
+              <div>
+                <strong>
+                  {books
+                    .filter((b) => b.readingStatus === "reading")
+                    .length.toString()
+                    .padStart(2, "0")}
+                </strong>
+                <span>本正在读</span>
+              </div>
+              <button
+                onClick={() =>
+                  setFilter(filter === "duplicate" ? "all" : "duplicate")
+                }
+              >
+                <strong>
+                  {books
+                    .filter(
+                      (b) => (keys.get(identity(b.title, b.author)) || 0) > 1,
+                    )
+                    .length.toString()
+                    .padStart(2, "0")}
+                </strong>
+                <span>本可能重复 ↗</span>
+              </button>
+            </div>
+            <div className="library-tools">
+              <label className="search">
+                <Search size={16} />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="找一本书、一位作者…"
+                  aria-label="搜索藏书"
+                />
+              </label>
+              <select aria-label="选择书架" value={shelf} onChange={e => setShelf(e.target.value)}>
+                <option value="all">所有书架</option>
+                {shelves.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <select
+                aria-label="筛选藏书"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              >
+                <option value="all">全部藏书</option>
+                <option value="unread">未读</option>
+                <option value="reading">在读</option>
+                <option value="done">已读</option>
+                <option value="unconfirmed">待确认</option>
+                <option value="duplicate">可能重复</option>
+              </select>
+              <div className="view-toggle">
+                <button
+                  className={view === "shelf" ? "active" : ""}
+                  onClick={() => setView("shelf")}
+                >
+                  书架
+                </button>
+                <button
+                  className={view === "list" ? "active" : ""}
+                  onClick={() => setView("list")}
+                >
+                  列表
                 </button>
               </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                {/* Selector Header */}
-                <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <label style={{ fontWeight: 600, fontSize: '0.95rem' }}>选择查看的书架：</label>
-                    <select 
-                      className="select-filter" 
-                      value={activeShelfId || ''} 
-                      onChange={(e) => setActiveShelfId(Number(e.target.value))}
-                    >
-                      {shelves.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {activeShelfId && (
-                    <div style={{ display: 'flex', gap: '0.75rem' }}>
-                      <button className="btn btn-secondary" onClick={() => {
-                        setScanShelfId(String(activeShelfId));
-                        // Set image URL to re-scan
-                        const currentShelf = shelves.find(s => s.id === activeShelfId);
-                        if (currentShelf?.photoUrl) {
-                          setUploadedImage(currentShelf.photoUrl);
-                        }
-                        setActiveTab('scan');
-                      }}>
-                        <Camera size={16} />
-                        更新此书架拍照
-                      </button>
-                      <button className="btn btn-danger" style={{ padding: '0.5rem' }} onClick={async () => {
-                        if (confirm(`确定要删除书架“${shelves.find(s => s.id === activeShelfId)?.name}”及架上所有书籍吗？`)) {
-                          await db.books.where('shelfId').equals(activeShelfId).delete();
-                          await db.shelves.delete(activeShelfId);
-                          const rem = await db.shelves.toArray();
-                          setActiveShelfId(rem.length > 0 ? rem[0].id || null : null);
-                        }
-                      }}>
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* The Virtual Wood Shelf */}
-                {activeShelfId && (
-                  <div className="shelf-wrapper">
-                    {(() => {
-                      const shelf = shelves.find(s => s.id === activeShelfId);
-                      const shelfBooks = books.filter(b => b.shelfId === activeShelfId);
-                      
-                      // Find unique row indices, sorted. E.g. [1, 2]
-                      const rows = Array.from(new Set(shelfBooks.map(b => b.row))).sort((a,b)=>a-b);
-                      // Make sure we render at least 2 rows even if empty
-                      const displayRows = rows.length > 0 ? rows : [1, 2];
-
-                      return (
-                        <div className="shelf-visual-board">
-                          <div className="shelf-header">
-                            <div className="shelf-meta">
-                              <h2>{shelf?.name}</h2>
-                              <p>{shelf?.description || '暂无描述'}</p>
-                            </div>
-                            <span style={{ fontSize: '0.85rem', color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                              <Info size={14} />
-                              点击书脊可查看详细档案、快捷豆瓣/电子书链接
-                            </span>
-                          </div>
-
-                          {displayRows.map(rNum => {
-                            const rowBooks = shelfBooks
-                              .filter(b => b.row === rNum)
-                              .sort((a, b) => a.position - b.position);
-                            return renderVisualRow(rNum, rowBooks);
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* --- VIEW: LIBRARY (GRID / TABLE) --- */}
-        {activeTab === 'library' && (
-          <div>
-            {/* Filters bar */}
-            <div className="card library-filters">
-              <div className="search-wrapper">
-                <Search size={18} className="search-icon" />
-                <input 
-                  type="text" 
-                  className="form-input search-input" 
-                  placeholder="搜索书名、作者或简介..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-
-              <select 
-                className="select-filter"
-                value={filterShelfId}
-                onChange={(e) => setFilterShelfId(e.target.value)}
+              <button
+                className="icon-button"
+                aria-label="手动添加书籍"
+                onClick={manual}
               >
-                <option value="all">所有书架</option>
-                {shelves.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-
-              <select 
-                className="select-filter"
-                value={filterDigitized}
-                onChange={(e) => setFilterDigitized(e.target.value)}
-              >
-                <option value="all">所有归档状态</option>
-                <option value="yes">已数字化确认</option>
-                <option value="no">未数字化确认</option>
-              </select>
-
-              <select 
-                className="select-filter"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-              >
-                <option value="rating-desc">评分从高到低</option>
-                <option value="rating-asc">评分从低到高</option>
-                <option value="title-asc">书名 (A-Z)</option>
-                <option value="title-desc">书名 (Z-A)</option>
-                <option value="position">按物理位置排布</option>
-              </select>
+                <Plus size={18} />
+              </button>
             </div>
-
-            {/* Books Table */}
-            {filteredBooks.length === 0 ? (
-              <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
-                <p style={{ color: 'var(--text-light)', fontStyle: 'italic' }}>
-                  没有找到符合过滤条件的书籍记录。
-                </p>
-              </div>
-            ) : (
-              <div className="books-table-wrapper">
-                <table className="books-table">
-                  <thead>
-                    <tr>
-                      <th>书籍</th>
-                      <th>作者</th>
-                      <th>所属书架位置</th>
-                      <th>豆瓣评分</th>
-                      <th>状态</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredBooks.map((book) => {
-                      const shelf = shelves.find(s => s.id === book.shelfId);
-                      return (
-                        <tr key={book.id}>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                              <span 
-                                className="table-color-dot" 
-                                style={{ backgroundColor: book.coverColor }}
-                              />
-                              <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>
-                                {book.title}
-                              </span>
-                            </div>
-                          </td>
-                          <td style={{ color: 'var(--text-muted)' }}>{book.author}</td>
-                          <td style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                            {shelf?.name || '未知书架'} (第 {book.row} 排, 位 {book.position})
-                          </td>
-                          <td>{renderStars(book.rating)}</td>
-                          <td>
-                            <button 
-                              className="badge" 
-                              style={{ 
-                                cursor: 'pointer',
-                                border: 'none',
-                                backgroundColor: book.isDigitized ? 'var(--success-light)' : 'rgba(0,0,0,0.05)',
-                                color: book.isDigitized ? 'var(--success)' : 'var(--text-muted)'
-                              }}
-                              onClick={() => toggleBookDigitized(book)}
-                            >
-                              {book.isDigitized ? '已数字化' : '未归档'}
-                            </button>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                              <button 
-                                className="btn btn-secondary" 
-                                style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
-                                onClick={() => setSelectedBook(book)}
-                              >
-                                详情
-                              </button>
-                              <button 
-                                className="btn btn-secondary" 
-                                style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
-                                onClick={() => {
-                                  setEditingBook(book);
-                                }}
-                              >
-                                <Edit size={12} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* --- VIEW: AI SCANNER --- */}
-        {activeTab === 'scan' && (
-          <div className="scan-container">
-            {/* Control Panel / Upload Zone */}
-            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.4rem' }}>
-                {isConfirmingScan ? '第二步：核对并确认书籍排布' : '第一步：上传书架照片'}
-              </h2>
-
-              {!isConfirmingScan ? (
-                <>
-                  <div className="form-group">
-                    <label>归档至书架：</label>
-                    <select 
-                      className="select-filter"
-                      value={scanShelfId}
-                      onChange={(e) => setScanShelfId(e.target.value)}
-                    >
-                      <option value="new">+ 扫描存为新书架...</option>
-                      {shelves.map(s => (
-                        <option key={s.id} value={s.id}>更新已有：{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {scanShelfId === 'new' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      <div className="form-group">
-                        <label>新书架名称：</label>
-                        <input 
-                          type="text" 
-                          className="form-input" 
-                          placeholder="例如：客厅左侧木书架" 
-                          value={newShelfName}
-                          onChange={(e) => setNewShelfName(e.target.value)}
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>描述/位置备注：</label>
-                        <textarea 
-                          className="form-input form-textarea" 
-                          placeholder="备注说明，方便今后定位找书..." 
-                          value={newShelfDesc}
-                          onChange={(e) => setNewShelfDesc(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Dropzone area */}
-                  <div 
-                    className="dropzone-card"
-                    onDragOver={handleDragOver}
-                    onDrop={handleDrop}
-                    onClick={triggerFileSelect}
-                  >
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      style={{ display: 'none' }} 
-                      accept="image/*"
-                      onChange={handleFileChange}
-                    />
-                    <div className="dropzone-icon">
-                      <Upload size={28} />
-                    </div>
-                    <div className="dropzone-text">
-                      <h3>将书架正面照片拖到此处，或点击上传</h3>
-                      <p>支持 JPG, PNG, WEBP。为保证书籍识别率，建议正面无倾角垂直拍摄。</p>
-                    </div>
-                    {uploadedFile && (
-                      <span className="badge badge-location">
-                        已选择: {uploadedFile.name}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Demo Trigger */}
-                  {useDemoMode && (
-                    <button className="btn btn-secondary" onClick={loadDemoImageForScan}>
-                      💡 加载预置 Demo 照片 (免 API Key 测试)
-                    </button>
-                  )}
-
-                  {uploadedImage && (
-                    <button 
-                      className="btn btn-primary" 
-                      onClick={runScanning}
-                      disabled={scanning}
-                    >
-                      {scanning ? '分析识别中...' : '开始 AI 识别整理'}
-                    </button>
-                  )}
-                </>
-              ) : (
-                /* Edit and confirm parsed results */
-                <div className="scan-confirmation-container">
-                  <div className="demo-banner">
-                    <Info size={16} />
-                    <div>
-                      <strong>核对信息：</strong> 以下是 Gemini 识别出的书籍排布（从上至下，从左至右）。您可以对内容进行增删或微调。
-                    </div>
-                  </div>
-
-                  <div className="scan-confirmation-list">
-                    {scanResultBooks.map((item, index) => (
-                      <div className="scan-book-item-card" key={index}>
-                        <input 
-                          type="color" 
-                          value={item.coverColor} 
-                          onChange={(e) => {
-                            const updated = [...scanResultBooks];
-                            updated[index].coverColor = e.target.value;
-                            setScanResultBooks(updated);
-                          }}
-                          style={{
-                            width: '32px',
-                            height: '48px',
-                            border: 'none',
-                            cursor: 'pointer',
-                            borderRadius: '4px',
-                            backgroundColor: 'transparent'
-                          }}
-                        />
-                        <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                          <input 
-                            type="text" 
-                            className="form-input" 
-                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.9rem', fontWeight: 600 }}
-                            value={item.title}
-                            onChange={(e) => {
-                              const updated = [...scanResultBooks];
-                              updated[index].title = e.target.value;
-                              setScanResultBooks(updated);
-                            }}
-                          />
-                          <input 
-                            type="text" 
-                            className="form-input" 
-                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}
-                            value={item.author}
-                            onChange={(e) => {
-                              const updated = [...scanResultBooks];
-                              updated[index].author = e.target.value;
-                              setScanResultBooks(updated);
-                            }}
-                          />
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-end' }}>
-                          <span className="scan-book-item-pos">
-                            Row {item.row} - Pos {item.position}
-                          </span>
-                          <button 
-                            className="btn btn-secondary" 
-                            style={{ padding: '0.25rem', color: 'var(--danger)' }}
-                            onClick={() => {
-                              setScanResultBooks(prev => prev.filter((_, i) => i !== index));
-                            }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                    <button className="btn btn-secondary" onClick={() => setIsConfirmingScan(false)}>
-                      重新上传
-                    </button>
-                    <button className="btn btn-primary" style={{ flexGrow: 1 }} onClick={handleSaveScanResult}>
-                      确认，并存入书架档案
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Realtime Camera Preview Frame & Logs */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div className="card" style={{ padding: '1rem' }}>
-                <h3 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>书架照预览</h3>
-                <div className="camera-preview-frame">
-                  {uploadedImage ? (
-                    <>
-                      <img src={uploadedImage} className="camera-preview-img" alt="Bookshelf preview" />
-                      {scanning && <div className="scanner-beam" />}
-                      {scanning && (
-                        <div className="scanner-overlay">
-                          <div className="spinner" />
-                          <span>AI 正在识别整理书籍...</span>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div style={{
-                      width: '100%',
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--text-light)',
-                      backgroundColor: 'rgba(0,0,0,0.03)',
-                      gap: '0.5rem'
-                    }}>
-                      <Camera size={36} />
-                      <span style={{ fontSize: '0.9rem' }}>暂无照片，请先在左侧选择上传</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Realtime AI parsing logs */}
-              {scanning && (
-                <div className="card">
-                  <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>AI 分析日志</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '150px', overflowY: 'auto' }}>
-                    {scanLogs.map((log, idx) => (
-                      <div 
-                        key={idx} 
-                        style={{ 
-                          fontSize: '0.85rem', 
-                          color: idx === scanLogs.length - 1 ? 'var(--primary)' : 'var(--text-muted)',
-                          fontWeight: idx === scanLogs.length - 1 ? 600 : 400,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem'
+            {!books.length ? (
+              <div className="onboarding">
+                <div className="book-illustration">
+                  {["#b99b71", "#6c7b64", "#b15b45", "#d5c8ac", "#4e6261"].map(
+                    (c, i) => (
+                      <span
+                        key={c}
+                        style={{
+                          background: c,
+                          height: 130 + (i % 3) * 18,
+                          transform: `rotate(${i === 0 ? -8 : 0}deg)`,
                         }}
                       >
-                        {idx === scanLogs.length - 1 ? <div className="spinner spinner-primary" style={{ width: '12px', height: '12px', borderWidth: '1.5px' }} /> : '✓'}
-                        {log}
-                      </div>
-                    ))}
-                  </div>
+                        书
+                      </span>
+                    ),
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* --- VIEW: SETTINGS --- */}
-        {activeTab === 'settings' && (
-          <div className="settings-container card">
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-              应用程序设置
-            </h2>
-
-            {/* Demo Mode settings */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h2>把你的书架，搬进这里。</h2>
+                <p>
+                  拍一张照片，逐本确认后建立藏书索引。
+                  <br />
+                  也可以手动录入，不需要连接模型。
+                </p>
                 <div>
-                  <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>Demo 演示模式 (推荐首次使用)</h3>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    启用后，上传书架照片时无需调用真实 API Key，系统将自动使用预设的精美书籍数据，以便立即感受完整功能。
-                  </p>
-                </div>
-                <input 
-                  type="checkbox" 
-                  checked={useDemoMode} 
-                  onChange={(e) => setUseDemoMode(e.target.checked)}
-                  style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                />
-              </div>
-
-              {useDemoMode ? (
-                <div className="demo-banner">
-                  <Check size={16} />
-                  <span>已启用演示模式，扫描界面会自动提供预置的示例照片供快速导入。</span>
-                </div>
-              ) : (
-                <div className="demo-banner inactive">
-                  <Info size={16} />
-                  <span>已停用演示模式，您将直接使用 OpenAI 兼容 API 发送图片。</span>
-                </div>
-              )}
-            </div>
-
-            {/* API Config settings */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', opacity: useDemoMode ? 0.5 : 1 }}>
-              <h3 style={{ fontSize: '1.2rem', color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                OpenAI 兼容大模型配置
-              </h3>
-              
-              <div className="form-group">
-                <label>API Base URL：</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="https://api.openai.com/v1" 
-                  value={apiBaseUrl}
-                  onChange={(e) => setApiBaseUrl(e.target.value)}
-                  disabled={useDemoMode}
-                />
-                <span className="form-help">
-                  您的 API 提供商的基础 URL (Base URL)，例如 <code>https://api.openai.com/v1</code> 或 <code>https://api.deepseek.com/v1</code>。如果是本地运行的 Ollama，通常是 <code>http://localhost:11434/v1</code>。
-                </span>
-              </div>
-
-              <div className="form-group">
-                <label>API Key：</label>
-                <input 
-                  type="password" 
-                  className="form-input" 
-                  placeholder="请输入您的 API Key (如 sk-...)" 
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  disabled={useDemoMode}
-                />
-                <span className="form-help">
-                  用于进行 API 请求的鉴权密钥。该密钥仅保存在您的本地浏览器中，绝不会上传到任何第三方服务器。
-                </span>
-              </div>
-
-              <div className="form-group">
-                <label>模型名称 (Model Name)：</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="gpt-4o-mini" 
-                  value={apiModelName}
-                  onChange={(e) => setApiModelName(e.target.value)}
-                  disabled={useDemoMode}
-                />
-                <span className="form-help">
-                  要调用的多模态模型名称，例如 <code>gpt-4o-mini</code>, <code>gpt-4o</code>, 或本地运行的 <code>llava</code> 等。<strong>请确保所选模型支持图片输入。</strong>
-                </span>
-              </div>
-
-              <div className="form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label>识别提示词 (Prompt)：</label>
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary" 
-                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
-                    onClick={() => {
-                      if (confirm('确定要恢复默认提示词吗？')) {
-                        setCustomPrompt(`你是一个专业的图书管理员和图像识别专家。请分析用户提供的书架照片，识别出书架上的所有书籍，并以 JSON 格式输出。
-
-你需要仔细识别：
-1. 书名 (title)：识别每本书的书名。
-2. 作者 (author)：识别作者名字。
-3. 简介 (description)：简短介绍该书的核心内容或背景。
-4. 封面主色调 (coverColor)：识别书脊或封面的主色调，必须为标准的 6 位 HEX 颜色代码（如 #2d6a4f, #d62246）。
-5. 行数 (row)：书架上的排数，从上到下依次为 1, 2, 3...
-6. 位置 (position)：在该排中从左到右的顺序，依次为 1, 2, 3...
-7. 估算评分 (rating)：基于书籍知名度和口碑，给出 0.0 到 10.0 之间的评分。
-
-请确保输出格式为合法的 JSON 对象，包含 "books" 数组。`);
-                      }
-                    }}
-                    disabled={useDemoMode}
+                  <button className="primary" onClick={startScan}>
+                    添加第一座书架 →
+                  </button>
+                  <button
+                    className="text-button"
+                    onClick={() =>
+                      guard(async () => {
+                        await seedDemoData();
+                        setNotice("已载入 6 本演示藏书。");
+                      })
+                    }
                   >
-                    恢复默认
+                    先逛逛演示书房
                   </button>
                 </div>
-                <textarea 
-                  className="form-input form-textarea" 
-                  style={{ height: '180px', fontFamily: 'monospace', fontSize: '0.9rem' }}
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  disabled={useDemoMode}
-                />
-                <span className="form-help">
-                  微调发送给大模型的提示词，使其按您需要的方式或特殊语言习惯识别书脊和书籍信息。
-                </span>
               </div>
-
-              {/* CORS Warning Alert Block */}
-              <div className="demo-banner inactive" style={{ borderLeftColor: 'var(--warning)', background: 'hsla(38, 92%, 50%, 0.05)', color: 'var(--text-main)', marginTop: '0.5rem' }}>
-                <Info size={18} style={{ color: 'var(--warning)', flexShrink: 0 }} />
-                <div style={{ fontSize: '0.85rem', lineHeight: '1.5' }}>
-                  <strong>⚠️ CORS 跨域限制提示：</strong>
-                  <br />
-                  由于本应用是一个纯前端网页（运行在浏览器中），向自定义 API 地址发起请求时可能会触发浏览器的 CORS (跨域资源共享) 限制。
-                  <ul>
-                    <li><strong>本地 Ollama：</strong> 启动时请通过环境变量启用跨域，例如 Mac/Linux 下运行 <code>OLLAMA_ORIGINS="*" ollama serve</code>。</li>
-                    <li><strong>本地 LM Studio / LocalAI：</strong> 请在设置中开启“Enable CORS”选项。</li>
-                    <li><strong>在线 API / 代理：</strong> 请确保您的 API 代理提供商的服务器配置了 <code>Access-Control-Allow-Origin: *</code> 响应头。</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* DB tools */}
-            <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
-              <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--text-main)' }}>数据维护工具</h3>
-              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                <button className="btn btn-secondary" onClick={handleResetDemoData}>
-                  重置并加载初始演示数据
-                </button>
-                <button className="btn btn-danger" onClick={handleClearDatabase}>
-                  清空所有本地数据
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-      </main>
-
-      {/* --- MODAL: BOOK DETAILS --- */}
-      {selectedBook && !editingBook && (
-        <div className="modal-overlay" onClick={() => setSelectedBook(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>书籍详细档案</h3>
-              <button 
-                className="btn btn-secondary" 
-                style={{ padding: '0.25rem 0.5rem', border: 'none' }}
-                onClick={() => setSelectedBook(null)}
-              >
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="book-detail-layout">
-                {/* Simulated vertical cover spine */}
-                <div 
-                  className="book-detail-cover-spine" 
-                  style={{ 
-                    backgroundColor: selectedBook.coverColor,
-                    borderLeft: '5px solid rgba(255,255,255,0.2)'
+            ) : !visible.length ? (
+              <div className="no-results">
+                <h2>没有找到这本书</h2>
+                <p>试试其他关键词，或清除筛选。</p>
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setQuery("");
+                    setFilter("all");
+                    setShelf("all");
                   }}
                 >
-                  <div style={{ writingMode: 'vertical-rl', letterSpacing: '4px', fontSize: '0.9rem', color: 'white', fontWeight: 700 }}>
-                    {selectedBook.title}
-                  </div>
+                  查看全部藏书 →
+                </button>
+              </div>
+            ) : (
+              <div className={`library-content ${book ? "with-details" : ""}`}>
+                <section>
+                  {view === "shelf" ? (
+                    shelves
+                      .filter((s) => visible.some((b) => b.shelfId === s.id))
+                      .map((s) => (
+                        <div className="shelf-section" key={s.id}>
+                          <div className="shelf-title">
+                            <h2>{s.name}</h2>
+                            <span>
+                              {visible.filter((b) => b.shelfId === s.id).length}{" "}
+                              本 · {s.description || "我的私人藏书"}
+                            </span>
+                          </div>
+                          {[
+                            ...new Set(
+                              visible
+                                .filter((b) => b.shelfId === s.id)
+                                .map((b) => b.row),
+                            ),
+                          ]
+                            .sort((a, b) => a - b)
+                            .map((row) => (
+                              <div className="shelf-row" key={row}>
+                                <span className="row-label">
+                                  {String(row).padStart(2, "0")} 层
+                                </span>
+                                <div className="spines">
+                                  {visible
+                                    .filter(
+                                      (b) =>
+                                        b.shelfId === s.id && b.row === row,
+                                    )
+                                    .map((b, i) => (
+                                      <button
+                                        key={b.id}
+                                        className={`spine ${b.id === selected ? "selected" : ""}`}
+                                        onClick={() => setSelected(b.id!)}
+                                        aria-label={`${b.title}，第 ${b.row} 层第 ${b.position} 本`}
+                                        style={{
+                                          backgroundColor: b.coverColor,
+                                color: bookInk(b.coverColor),
+                                          height: 155 + ((i * 17) % 35),
+                                        }}
+                                      >
+                                        <span>{b.title}</span>
+                                        <small>
+                                          {b.author || "作者待补充"}
+                                        </small>
+                                        <i>
+                                          {String(b.position).padStart(2, "0")}
+                                        </i>
+                                      </button>
+                                    ))}
+                                </div>
+                                <div className="wood-edge" />
+                              </div>
+                            ))}
+                        </div>
+                      ))
+                  ) : (
+                    <div className="book-list">
+                      {visible.map((b) => (
+                        <button
+                          className="list-book"
+                          key={b.id}
+                          onClick={() => setSelected(b.id!)}
+                        >
+                          <span
+                            className="mini-cover"
+                            style={{ background: b.coverColor }}
+                          >
+                            <BookOpen size={20} />
+                          </span>
+                          <span>
+                            <strong>{b.title}</strong>
+                            <small>{b.author || "作者待补充"}</small>
+                          </span>
+                          <span className="list-location">
+                            {shelves.find((s) => s.id === b.shelfId)?.name}
+                            <small>
+                              第 {b.row} 层 · 第 {b.position} 本
+                            </small>
+                          </span>
+                          <span className="status-tag">
+                            {statusNames[b.readingStatus || "unread"]}
+                          </span>
+                          <ChevronRight size={15} />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </section>
+                {book && (
+                  <aside className="book-detail">
+                    <button
+                      className="close-detail"
+                      onClick={() => setSelected(null)}
+                      aria-label="关闭书籍详情"
+                    >
+                      <X size={17} />
+                    </button>
+                    <div
+                      className="detail-cover"
+                      style={{ background: book.coverColor, color: bookInk(book.coverColor) }}
+                    >
+                      <span>藏书档案 / {String(book.id).padStart(3, "0")}</span>
+                      <h2>{book.title}</h2>
+                      <p>{book.author || "作者待补充"}</p>
+                      <BookOpen size={26} />
+                    </div>
+                    <div className="location">
+                      <Bookmark size={15} />
+                      <div>
+                        {bookShelf?.name}
+                        <strong>
+                          第 {book.row} 层 · 从左数第 {book.position} 本
+                        </strong>
+                      </div>
+                    </div>
+                    {bookShelf?.photoUrl && (
+                      <div className="photo-locator">
+                        <img
+                          src={
+                            bookShelf.photoUrl.startsWith("/demo_")
+                              ? import.meta.env.BASE_URL + "demo_bookshelf.jpg"
+                              : bookShelf.photoUrl
+                          }
+                          alt="这本书所在书架的原始照片"
+                        />
+                        {book.bbox && (
+                          <span
+                            className="bbox"
+                            style={{
+                              left: book.bbox[0] * 100 + "%",
+                              top: book.bbox[1] * 100 + "%",
+                              width: book.bbox[2] * 100 + "%",
+                              height: book.bbox[3] * 100 + "%",
+                            }}
+                          />
+                        )}
+                      </div>
+                    )}
+                    <label>
+                      阅读状态
+                      <select
+                        value={book.readingStatus || "unread"}
+                        onChange={(e) =>
+                          guard(async () => {
+                            await db.books.update(book.id!, {
+                              readingStatus: e.target.value,
+                            });
+                          })
+                        }
+                      >
+                        {Object.entries(statusNames).map(([k, v]) => (
+                          <option key={k} value={k}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="description">
+                      {book.notes ||
+                        book.description ||
+                        "还没有笔记，为这本书留下一点印象吧。"}
+                    </p>
+                    {(keys.get(identity(book.title, book.author)) || 0) > 1 && (
+                      <p className="duplicate">
+                        书房里还有同名同作者的书，请核对是否为不同版本。
+                      </p>
+                    )}
+                    <div className="detail-actions">
+                      <button
+                        className="primary"
+                        onClick={() => setEdit({ ...book })}
+                      >
+                        编辑档案
+                      </button>
+                      <button
+                        className="icon-button"
+                        aria-label="删除此书"
+                        onClick={() =>
+                          guard(async () => {
+                            await db.books.delete(book.id!);
+                            setDeleted(book);
+                            setSelected(null);
+                            setNotice("书籍已删除，可以撤销。");
+                          })
+                        }
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
+                    <a
+                      className="external"
+                      href={`https://search.douban.com/book/subject_search?search_text=${encodeURIComponent(book.title)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      去豆瓣查阅资料 <ArrowUpRight size={12} />
+                    </a>
+                  </aside>
+                )}
+              </div>
+            )}
+          </>
+        ) : tab === "scan" ? (
+          <>
+            <section className="page-title">
+              <div>
+                <div className="eyebrow">A PLACE FOR EVERY STORY</div>
+                <h1>拍下来，再慢慢整理。</h1>
+                <p>正面拍摄书脊，光线均匀。识别结果经你核对后才会入库。</p>
+              </div>
+              <button className="text-button" onClick={manual}>
+                <Plus size={15} />
+                手动录入
+              </button>
+            </section>
+            <div className="scan-layout">
+              <section className="photo-panel">
+                <div className="panel-label">
+                  01 / 书架照片{demo && <span>预置演示</span>}
                 </div>
-
-                <div className="book-detail-info">
-                  <h2>{selectedBook.title}</h2>
-                  <div className="book-detail-author">著者：{selectedBook.author}</div>
-                  
-                  <div className="book-detail-badge-group">
-                    <span className="badge badge-rating">
-                      豆瓣 ⭐ {selectedBook.rating}
-                    </span>
-                    <span className="badge badge-location">
-                      位置：第 {selectedBook.row} 排, {selectedBook.position} 号位
-                    </span>
-                    <span 
-                      className="badge"
-                      style={{
-                        backgroundColor: selectedBook.isDigitized ? 'var(--success-light)' : 'rgba(0,0,0,0.05)',
-                        color: selectedBook.isDigitized ? 'var(--success)' : 'var(--text-muted)'
-                      }}
-                    >
-                      {selectedBook.isDigitized ? '已确认归档' : '未核准归档'}
-                    </span>
+                <input
+                  ref={photoInput}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(e) => image(e.target.files?.[0])}
+                />
+                {photo ? (
+                  <div className="photo-locator scan-photo">
+                    <img src={photo} alt="待整理书架照片" />
+                    {candidates[focused]?.bbox && (
+                      <span
+                        className="bbox"
+                        style={{
+                          left: candidates[focused].bbox![0] * 100 + "%",
+                          top: candidates[focused].bbox![1] * 100 + "%",
+                          width: candidates[focused].bbox![2] * 100 + "%",
+                          height: candidates[focused].bbox![3] * 100 + "%",
+                        }}
+                      />
+                    )}
                   </div>
-
-                  <p className="book-detail-desc">{selectedBook.description || '暂无内容介绍'}</p>
-
-                  <div className="book-detail-links">
-                    <h4 style={{ fontSize: '0.9rem', color: 'var(--text-main)', marginBottom: '0.25rem' }}>外部关联检索 (跳转外部平台)：</h4>
-                    <a 
-                      href={selectedBook.doubanLink} 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="book-detail-link-btn"
-                    >
-                      <span>📖 豆瓣读书档案</span>
-                      <ExternalLink size={14} />
-                    </a>
-                    <a 
-                      href={selectedBook.wereadLink} 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="book-detail-link-btn"
-                    >
-                      <span>🔍 微信读书电子版</span>
-                      <ExternalLink size={14} />
-                    </a>
-                    <a 
-                      href={selectedBook.taobaoLink} 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="book-detail-link-btn"
-                    >
-                      <span>🛍️ 淘宝比价购买</span>
-                      <ExternalLink size={14} />
-                    </a>
-                  </div>
+                ) : (
+                  <button
+                    className="photo-drop"
+                    disabled={!!busy}
+                    onClick={() => photoInput.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      image(e.dataTransfer.files[0]);
+                    }}
+                  >
+                    <Camera size={35} />
+                    <strong>选择一张书架照片</strong>
+                    <span>点击上传，或拖放到这里</span>
+                  </button>
+                )}
+                <div className="photo-actions">
+                  <button
+                    className="text-button"
+                    disabled={!!busy}
+                    onClick={() => photoInput.current?.click()}
+                  >
+                    {photo ? "更换照片" : "上传照片"}
+                  </button>
+                  <button
+                    className="text-button"
+                    disabled={!!busy}
+                    onClick={demoReview}
+                  >
+                    演示校对 ↗
+                  </button>
                 </div>
+                <button
+                  className="primary"
+                  disabled={!photo || !!busy}
+                  onClick={scan}
+                >
+                  {busy || "识别照片中的书籍"} <span>→</span>
+                </button>
+                {abort.current && (
+                  <button
+                    className="text-button"
+                    onClick={() => abort.current?.abort()}
+                  >
+                    取消识别
+                  </button>
+                )}
+                <p className="subnote">
+                  点击识别会将照片发送到你配置的模型服务。
+                  <br />
+                  藏书档案保存在本机，API Key 不进入备份。
+                </p>
+                <div className="panel-label destination">存放到哪里</div>
+                <label>
+                  目标书架
+                  <select
+                    value={target}
+                    onChange={(e) => setTarget(e.target.value)}
+                    disabled={!!busy}
+                  >
+                    <option value="new">＋ 新建书架</option>
+                    {shelves.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {target === "new" && (
+                  <>
+                    <label>
+                      书架名称
+                      <input
+                        value={shelfName}
+                        onChange={(e) => setShelfName(e.target.value)}
+                        maxLength={100}
+                        placeholder="例如：书房靠窗的书架"
+                      />
+                    </label>
+                    <label>
+                      位置备注
+                      <input
+                        value={shelfDesc}
+                        onChange={(e) => setShelfDesc(e.target.value)}
+                        maxLength={200}
+                        placeholder="例如：书桌右侧，常用书"
+                      />
+                    </label>
+                  </>
+                )}
+                <p className="subnote">
+                  添加到已有书架时，仅追加记录，不覆盖原有藏书与照片。
+                </p>
+              </section>
+              <section className="review-panel">
+                <div className="review-heading">
+                  <div className="panel-label">
+                    02 / 逐本校对 <span>{candidates.length} 本</span>
+                  </div>
+                  <button
+                    className="text-button"
+                    disabled={!candidates.length || !!busy}
+                    onClick={() => setChecked(candidates.map((_, i) => i))}
+                  >
+                    全部已核对
+                  </button>
+                </div>
+                {!candidates.length ? (
+                  <div className="review-empty">
+                    <BookOpen size={34} />
+                    <h2>好记性，从一次确认开始。</h2>
+                    <p>
+                      识别到的书会出现在这里。
+                      <br />
+                      核对书名、作者和位置，再收进书房。
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="review-list">
+                      {candidates.map((b, i) => (
+                        <article
+                          key={i}
+                          className={`candidate ${focused === i ? "focused" : ""}`}
+                          onFocus={() => setFocused(i)}
+                        >
+                          <div className="candidate-top">
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={checked.includes(i)}
+                                onChange={(e) =>
+                                  setChecked((c) =>
+                                    e.target.checked
+                                      ? [...c, i]
+                                      : c.filter((x) => x !== i),
+                                  )
+                                }
+                              />
+                              已核对
+                            </label>
+                            <span className={`confidence ${b.confidence}`}>
+                              {b.confidence === "high"
+                                ? "较清晰"
+                                : b.confidence === "medium"
+                                  ? "需核对"
+                                  : "需补充"}
+                            </span>
+                            <button
+                              aria-label={`移除第 ${i + 1} 条识别`}
+                              onClick={() => {
+                                setCandidates((c) =>
+                                  c.filter((_, j) => j !== i),
+                                );
+                                setChecked((c) =>
+                                  c
+                                    .filter((x) => x !== i)
+                                    .map((x) => (x > i ? x - 1 : x)),
+                                );
+                                setFocused(0);
+                              }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                          <div className="candidate-fields">
+                            <label>
+                              书名
+                              <input
+                                value={b.title}
+                                onChange={(e) =>
+                                  patch(i, { title: e.target.value })
+                                }
+                              />
+                            </label>
+                            <label>
+                              作者
+                              <input
+                                value={b.author}
+                                onChange={(e) =>
+                                  patch(i, { author: e.target.value })
+                                }
+                                placeholder="看不清可以留空"
+                              />
+                            </label>
+                            <label>
+                              第几层
+                              <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={b.row}
+                                onChange={(e) =>
+                                  patch(i, { row: +e.target.value })
+                                }
+                              />
+                            </label>
+                            <label>
+                              从左数第几本
+                              <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={b.position}
+                                onChange={(e) =>
+                                  patch(i, { position: +e.target.value })
+                                }
+                              />
+                            </label>
+                          </div>
+                          {books.some(
+                            (x) =>
+                              identity(x.title, x.author) ===
+                              identity(b.title, b.author),
+                          ) && (
+                            <p className="duplicate">
+                              已藏有同名同作者的书，仍可作为另一册添加。
+                            </p>
+                          )}
+                          {target !== "new" &&
+                            books.some(
+                              (x) =>
+                                x.shelfId === +target &&
+                                x.row === b.row &&
+                                x.position === b.position,
+                            ) && (
+                              <p className="duplicate">
+                                该位置已有藏书，请核对位置后再保存。
+                              </p>
+                            )}
+                        </article>
+                      ))}
+                    </div>
+                    <div className="save-bar">
+                      <span>
+                        {checked.length} / {candidates.length} 本已核对
+                      </span>
+                      <button
+                        className="primary"
+                        disabled={!checked.length || !!busy}
+                        onClick={saveCandidates}
+                      >
+                        <Check size={16} />
+                        收进书房
+                      </button>
+                    </div>
+                  </>
+                )}
+              </section>
+            </div>
+          </>
+        ) : (
+          <>
+            <section className="page-title">
+              <div>
+                <div className="eyebrow">MAKE YOURSELF AT HOME</div>
+                <h1>让书房，按你的方式运转。</h1>
+                <p>连接你信任的模型，定期备份你的藏书。</p>
+              </div>
+            </section>
+            <div className="settings-grid">
+              <form
+                className="settings-card"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  guard(async () => {
+                    const u = new URL(base);
+                    if (!["http:", "https:"].includes(u.protocol))
+                      throw new Error("请输入 http(s) 接口地址");
+                    localStorage.setItem("llm_api_base", base);
+                    localStorage.setItem("llm_model", model);
+                    sessionStorage.setItem("bookshelf_key", key);
+                    setNotice(
+                      "设置已保存。新填写的 Key 仅保存在当前标签页会话。",
+                    );
+                  });
+                }}
+              >
+                <div className="panel-label">视觉识别模型</div>
+                <h2>给书房一双眼睛</h2>
+                <p>支持提供 Chat Completions 图片输入的兼容接口。</p>
+                <label>
+                  接口地址
+                  <input
+                    type="url"
+                    required
+                    value={base}
+                    onChange={(e) => setBase(e.target.value)}
+                    placeholder="https://…/v1"
+                  />
+                </label>
+                <label>
+                  模型名称
+                  <input
+                    required
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    placeholder="填写服务商支持的视觉模型名称"
+                  />
+                </label>
+                <label>
+                  API Key
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={key}
+                    onChange={(e) => setKey(e.target.value)}
+                    placeholder="仅用于你发起的识别"
+                  />
+                </label>
+                <button className="primary">保存模型设置</button>
+                <p className="subnote">
+                  模型需要允许浏览器跨域调用。没有接口时，也能使用手动录入和演示。
+                </p>
+              </form>
+              <div className="settings-card">
+                <div className="panel-label">数据与备份</div>
+                <h2>你的藏书，由你保管。</h2>
+                <p>
+                  本机共有 {shelves.length} 座书架、{books.length}{" "}
+                  本书。换设备前，记得导出一份备份。
+                </p>
+                <div className="backup-box">
+                  <BookOpen size={32} />
+                  <strong>书房档案 · JSON</strong>
+                  <span>书籍、位置、笔记和已保存的照片</span>
+                </div>
+                <button className="primary" onClick={backup}>
+                  <Download size={16} />
+                  导出完整备份
+                </button>
+                <input
+                  ref={backupInput}
+                  type="file"
+                  accept=".json,application/json"
+                  hidden
+                  onChange={(e) => restore(e.target.files?.[0])}
+                />
+                <button
+                  className="secondary"
+                  disabled={!!busy}
+                  onClick={() => backupInput.current?.click()}
+                >
+                  <Upload size={16} />
+                  {busy || "导入备份并合并"}
+                </button>
+                <p className="subnote">
+                  导入不会清空书房；同一份备份可重复导入。
+                  <br />
+                  浏览器清理站点数据会删除本地藏书，请定期备份。
+                </p>
               </div>
             </div>
-            <div className="modal-footer">
-              <button 
-                className="btn btn-secondary"
-                onClick={() => setEditingBook(selectedBook)}
+          </>
+        )}
+        <footer>
+          <span>书香管家 · 为每一本书，留一个位置。</span>
+          <span>LOCAL FIRST, ALWAYS.</span>
+        </footer>
+      </main>
+      <dialog
+        ref={dialog}
+        onCancel={() => setEdit(null)}
+        className="edit-dialog"
+      >
+        {edit && (
+          <form onSubmit={saveEdit}>
+            <div className="dialog-heading">
+              <h2>编辑藏书档案</h2>
+              <button
+                type="button"
+                onClick={() => setEdit(null)}
+                aria-label="关闭编辑"
               >
-                修改信息
-              </button>
-              <button 
-                className="btn btn-danger"
-                onClick={() => handleDeleteBook(selectedBook.id!)}
-              >
-                删除书籍
-              </button>
-              <button 
-                className="btn btn-primary"
-                onClick={() => toggleBookDigitized(selectedBook)}
-              >
-                {selectedBook.isDigitized ? '标记为未归档' : '标记为已数字化'}
+                <X size={18} />
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL: EDIT BOOK DETAILS --- */}
-      {editingBook && (
-        <div className="modal-overlay" onClick={() => setEditingBook(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <form onSubmit={handleUpdateBookDetails}>
-              <div className="modal-header">
-                <h3>编辑书籍信息</h3>
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
-                  style={{ padding: '0.25rem 0.5rem', border: 'none' }}
-                  onClick={() => setEditingBook(null)}
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div className="form-group">
-                  <label>书名：</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    value={editingBook.title}
-                    onChange={(e) => setEditingBook(prev => prev ? { ...prev, title: e.target.value } : null)}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>作者：</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    value={editingBook.author}
-                    onChange={(e) => setEditingBook(prev => prev ? { ...prev, author: e.target.value } : null)}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>估计评分：</label>
-                  <input 
-                    type="number" 
-                    step="0.1" 
-                    min="0" 
-                    max="10" 
-                    className="form-input" 
-                    value={editingBook.rating}
-                    onChange={(e) => setEditingBook(prev => prev ? { ...prev, rating: Number(e.target.value) } : null)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>封面脊梁色值 (Cover Hex)：</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input 
-                      type="color" 
-                      value={editingBook.coverColor}
-                      onChange={(e) => setEditingBook(prev => prev ? { ...prev, coverColor: e.target.value } : null)}
-                      style={{ width: '40px', height: '40px', border: 'none', cursor: 'pointer', borderRadius: '4px' }}
-                    />
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      style={{ flexGrow: 1 }}
-                      value={editingBook.coverColor}
-                      onChange={(e) => setEditingBook(prev => prev ? { ...prev, coverColor: e.target.value } : null)}
-                    />
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label>所属书架排数：</label>
-                    <input 
-                      type="number" 
-                      min="1" 
-                      className="form-input" 
-                      value={editingBook.row}
-                      onChange={(e) => setEditingBook(prev => prev ? { ...prev, row: Number(e.target.value) } : null)}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>从左到右位置号：</label>
-                    <input 
-                      type="number" 
-                      min="1" 
-                      className="form-input" 
-                      value={editingBook.position}
-                      onChange={(e) => setEditingBook(prev => prev ? { ...prev, position: Number(e.target.value) } : null)}
-                    />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label>内容简介：</label>
-                  <textarea 
-                    className="form-input form-textarea" 
-                    value={editingBook.description}
-                    onChange={(e) => setEditingBook(prev => prev ? { ...prev, description: e.target.value } : null)}
-                  />
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button 
-                  type="button" 
-                  className="btn btn-secondary"
-                  onClick={() => setEditingBook(null)}
-                >
-                  取消
-                </button>
-                <button 
-                  type="submit" 
-                  className="btn btn-primary"
-                >
-                  保存修改
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
+            <label>
+              书名
+              <input
+                autoFocus
+                required
+                maxLength={200}
+                value={edit.title}
+                onChange={(e) => setEdit({ ...edit, title: e.target.value })}
+              />
+            </label>
+            <label>
+              作者
+              <input
+                maxLength={200}
+                value={edit.author}
+                onChange={(e) => setEdit({ ...edit, author: e.target.value })}
+              />
+            </label>
+            <div className="two-cols">
+              <label>
+                层数
+                <input
+                  required
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={edit.row}
+                  onChange={(e) => setEdit({ ...edit, row: +e.target.value })}
+                />
+              </label>
+              <label>
+                从左数位置
+                <input
+                  required
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={edit.position}
+                  onChange={(e) =>
+                    setEdit({ ...edit, position: +e.target.value })
+                  }
+                />
+              </label>
+            </div>
+            <label>
+              书脊颜色
+              <input
+                type="color"
+                value={edit.coverColor}
+                onChange={(e) =>
+                  setEdit({ ...edit, coverColor: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              阅读笔记
+              <textarea
+                maxLength={5000}
+                rows={4}
+                value={edit.notes || ""}
+                onChange={(e) => setEdit({ ...edit, notes: e.target.value })}
+              />
+            </label>
+            <button className="primary">保存档案</button>
+          </form>
+        )}
+      </dialog>
     </div>
   );
 }
-
-export default App;

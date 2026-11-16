@@ -17,7 +17,11 @@ export interface Book {
   author: string;
   description: string;
   coverColor: string; // Hex color code (e.g., #3A6D8C)
-  rating: number; // Douban rating (e.g., 8.5)
+  rating: number; // Legacy field; never displayed as a verified external rating.
+  confidence?: "high" | "medium" | "low";
+  bbox?: [number, number, number, number];
+  notes?: string;
+  readingStatus?: string;
   doubanLink: string;
   wereadLink: string;
   taobaoLink: string;
@@ -62,7 +66,7 @@ export async function seedDemoData() {
     const shelfId = await db.shelves.add({
     name: '客厅木质书架',
     description: '位于客厅电视墙左侧，存放常用人文社科与小说书籍。',
-    photoUrl: '/demo_bookshelf.jpg',
+    photoUrl: import.meta.env.BASE_URL + 'demo_bookshelf.jpg',
     createdAt: Date.now(),
   });
 
