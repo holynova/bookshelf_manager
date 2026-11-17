@@ -18,26 +18,26 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #4e6440;
+  color: #52604a;
 }
 .brand > span {
   font:
-    600 23px "Songti SC",
+    600 24px "Songti SC",
     Georgia,
     serif;
-  letter-spacing: 1px;
+  letter-spacing: normal;
 }
 .brand small {
   display: block;
-  font: 7px monospace;
-  letter-spacing: 1.4px;
+  font: 14px sans-serif;
+  letter-spacing: normal;
   margin-top: 6px;
-  color: #899178;
+  color: #52604a;
 }
 .nav-heading {
-  font-size: 9px;
-  letter-spacing: 2px;
-  color: #92987f;
+  font-size: 14px;
+  letter-spacing: normal;
+  color: #52604a;
   margin: 40px 0 15px;
 }
 .sidebar nav {
@@ -52,18 +52,18 @@
   gap: 10px;
   background: none;
   padding: 12px;
-  font-size: 12px;
-  color: #818973;
+  font-size: 14px;
+  color: #52604a;
   border-radius: 5px;
   width: 100%;
 }
 .sidebar button.active {
   background: #e0e6d1;
-  color: #45603b;
+  color: #52604a;
 }
 .sidebar button > span:last-child:not(:first-child) {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 14px;
 }
 .shelf-nav {
   overflow: auto;
@@ -72,17 +72,17 @@
   margin-top: 30px;
 }
 .shelf-nav button {
-  font-size: 11px;
+  font-size: 14px;
   padding: 10px 8px;
 }
 .shelf-nav button.chosen {
-  color: #47603c;
+  color: #52604a;
   font-weight: 600;
 }
 .shelf-nav small {
   margin-left: auto;
-  color: #9da58e;
-  font-size: 9px;
+  color: #52604a;
+  font-size: 14px;
 }
 .shelf-dot {
   width: 5px;
@@ -97,10 +97,10 @@
 }
 .small-quote {
   font:
-    20px/1.6 "Songti SC",
+    24px/1.6 "Songti SC",
     Georgia,
     serif;
-  color: #8f9a7c;
+  color: #52604a;
   border-top: 1px solid #dcded0;
   padding-top: 22px;
   margin-bottom: 25px;
@@ -109,14 +109,14 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
-  color: #818b72;
+  font-size: 14px;
+  color: #52604a;
   padding: 10px 12px;
 }
 .local {
   display: block;
-  font-size: 8px;
-  color: #99a18b;
+  font-size: 14px;
+  color: #52604a;
   margin: 20px 12px 0;
 }
 .shell > main {
@@ -136,13 +136,13 @@
   display: flex;
   align-items: center;
   gap: 11px;
-  font-size: 10px;
-  color: #8b937d;
+  font-size: 14px;
+  color: #52604a;
 }
 .header-date {
-  font: 8px monospace;
-  letter-spacing: 2px;
-  color: #9da48f;
+  font: 14px sans-serif;
+  letter-spacing: normal;
+  color: #52604a;
 }
 .page-title {
   display: flex;
@@ -152,22 +152,22 @@
   padding: 38px 0 30px;
 }
 .eyebrow {
-  font: 9px monospace;
-  letter-spacing: 2px;
-  color: #899779;
+  font: 14px sans-serif;
+  letter-spacing: normal;
+  color: #52604a;
 }
 h1 {
   font:
-    500 clamp(27px, 2.9vw, 39px) / 1.5 "Songti SC",
+    500 32px / 1.5 "Songti SC",
     Georgia,
     serif;
-  letter-spacing: -0.7px;
+  letter-spacing: normal;
   margin: 12px 0 10px;
 }
 .page-title p {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.8;
-  color: #8c947f;
+  color: #52604a;
   margin: 0;
 }
 .primary {
@@ -179,7 +179,7 @@ h1 {
   color: #fffcef;
   padding: 12px 18px;
   border-radius: 5px;
-  font-size: 12px;
+  font-size: 14px;
   white-space: nowrap;
 }
 .primary:hover:not(:disabled) {
@@ -197,16 +197,16 @@ h1 {
   background: transparent;
   padding: 12px;
   border-radius: 5px;
-  font-size: 12px;
+  font-size: 14px;
 }
 .text-button {
   background: transparent;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #617a4e;
+  color: #52604a;
   padding: 8px 2px;
-  font-size: 11px;
+  font-size: 14px;
 }
 .stats {
   display: grid;
@@ -232,13 +232,13 @@ h1 {
 }
 .stats strong {
   font:
-    37px Georgia,
+    32px Georgia,
     serif;
-  color: #4e6440;
+  color: #52604a;
 }
 .stats span {
-  font-size: 10px;
-  color: #8b957b;
+  font-size: 14px;
+  color: #52604a;
 }
 .library-tools {
   display: flex;
@@ -261,13 +261,13 @@ h1 {
   border: 0;
   margin: 0;
   padding: 12px 9px;
-  font-size: 11px;
+  font-size: 14px;
   outline-offset: -2px;
 }
 .library-tools > select {
   width: 120px;
   margin: 0;
-  font-size: 11px;
+  font-size: 14px;
   padding: 10px;
 }
 .view-toggle {
@@ -279,15 +279,15 @@ h1 {
   margin-left: auto;
 }
 .view-toggle button {
-  font-size: 10px;
+  font-size: 14px;
   padding: 7px 12px;
   background: none;
-  color: #8a967b;
+  color: #52604a;
   border-radius: 3px;
 }
 .view-toggle .active {
   background: #e3e9d7;
-  color: #4a623d;
+  color: #52604a;
 }
 .icon-button {
   background: transparent;
@@ -320,14 +320,14 @@ h1 {
 }
 .shelf-title h2 {
   font:
-    20px "Songti SC",
+    24px "Songti SC",
     Georgia,
     serif;
   margin: 0;
 }
 .shelf-title > span {
-  font-size: 9px;
-  color: #a0a68f;
+  font-size: 14px;
+  color: #52604a;
   max-width: 55%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -346,9 +346,9 @@ h1 {
   position: absolute;
   left: 12px;
   top: 12px;
-  font: 8px monospace;
-  letter-spacing: 1px;
-  color: #a4a789;
+  font: 14px sans-serif;
+  letter-spacing: normal;
+  color: #52604a;
 }
 .spines {
   display: flex;
@@ -390,15 +390,15 @@ h1 {
   writing-mode: vertical-rl;
   max-height: 125px;
   overflow: hidden;
-  letter-spacing: 2px;
+  letter-spacing: normal;
   font:
-    15px "Songti SC",
+    16px "Songti SC",
     Georgia,
     serif;
   text-shadow: 0 1px 3px #0007;
 }
 .spine small {
-  font-size: 5px;
+  font-size: 14px;
   position: absolute;
   bottom: 25px;
   max-width: 85%;
@@ -412,7 +412,7 @@ h1 {
   left: 0;
   right: 0;
   text-align: center;
-  font: 7px monospace;
+  font: 14px sans-serif;
   color: #fffc;
 }
 .spine:hover,
@@ -442,7 +442,7 @@ h1 {
   display: block;
   margin: 0 0 12px auto;
   background: transparent;
-  color: #8f987f;
+  color: #52604a;
 }
 .detail-cover {
   position: relative;
@@ -461,18 +461,18 @@ h1 {
   z-index: -1;
 }
 .detail-cover > span {
-  font: 6px monospace;
-  letter-spacing: 1px;
+  font: 14px sans-serif;
+  letter-spacing: normal;
   opacity: 0.7;
 }
 .detail-cover h2 {
   font:
-    25px/1.4 "Songti SC",
+    24px/1.4 "Songti SC",
     serif;
   margin: 23px 0 15px;
 }
 .detail-cover p {
-  font-size: 10px;
+  font-size: 14px;
   color: #fffb;
 }
 .detail-cover > svg {
@@ -486,26 +486,26 @@ h1 {
   align-items: center;
   gap: 10px;
   padding: 20px 0;
-  color: #7b8867;
-  font-size: 10px;
+  color: #52604a;
+  font-size: 14px;
 }
 .location strong {
   display: block;
-  font-size: 10px;
+  font-size: 14px;
   margin-top: 7px;
   font-weight: 500;
-  color: #526c40;
+  color: #52604a;
 }
 .book-detail label {
-  font-size: 10px;
+  font-size: 14px;
 }
 .book-detail select {
-  font-size: 11px;
+  font-size: 14px;
 }
 .description {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.8;
-  color: #8c947d;
+  color: #52604a;
   white-space: pre-wrap;
 }
 .detail-actions {
@@ -521,8 +521,8 @@ h1 {
   justify-content: center;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
-  color: #7b8f63;
+  font-size: 14px;
+  color: #52604a;
   margin-top: 17px;
 }
 .book-list {
@@ -555,24 +555,24 @@ h1 {
 }
 .list-book small {
   display: block;
-  color: #8c957c;
-  font-size: 10px;
+  color: #52604a;
+  font-size: 14px;
   margin-top: 7px;
 }
 .list-location {
   margin-left: auto;
-  font-size: 10px;
-  color: #6d7f5b;
+  font-size: 14px;
+  color: #52604a;
 }
 .status-tag {
-  font-size: 9px;
+  font-size: 14px;
   padding: 5px 9px;
   background: #e8eddd;
-  color: #7d8a6a;
+  color: #52604a;
   border-radius: 3px;
 }
 .list-book > svg {
-  color: #929e7f;
+  color: #52604a;
 }
 .onboarding {
   text-align: center;
@@ -607,14 +607,14 @@ h1 {
 .onboarding h2,
 .no-results h2 {
   font:
-    25px "Songti SC",
+    24px "Songti SC",
     serif;
   margin: 0 0 15px;
 }
 .onboarding p,
 .no-results p {
-  font-size: 12px;
-  color: #8e987f;
+  font-size: 14px;
+  color: #52604a;
   line-height: 1.9;
 }
 .onboarding > div:last-child {
@@ -637,20 +637,20 @@ h1 {
   border: 1px solid #d4dfc3;
   border-radius: 5px;
   margin-top: 18px;
-  font-size: 12px;
-  color: #5d7646;
+  font-size: 14px;
+  color: #52604a;
   line-height: 1.8;
 }
 .notice > button {
   margin-left: auto;
   background: none;
-  font-size: 11px;
+  font-size: 14px;
   flex-shrink: 0;
 }
 .notice.error {
   background: #f5e8dc;
   border-color: #e7d2bc;
-  color: #97633e;
+  color: #52604a;
 }
 .scan-layout {
   display: grid;
@@ -667,20 +667,20 @@ h1 {
   min-width: 0;
 }
 .panel-label {
-  font-size: 10px;
-  letter-spacing: 1.5px;
-  color: #82956d;
+  font-size: 14px;
+  letter-spacing: normal;
+  color: #52604a;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 .panel-label > span {
-  font-size: 9px;
-  letter-spacing: 0;
+  font-size: 14px;
+  letter-spacing: normal;
   padding: 4px 7px;
   background: #eaf0df;
   border-radius: 4px;
-  color: #6e8558;
+  color: #52604a;
 }
 .photo-drop {
   display: flex;
@@ -694,14 +694,14 @@ h1 {
   min-height: 240px;
   width: 100%;
   margin-top: 20px;
-  color: #8a9b75;
+  color: #52604a;
 }
 .photo-drop strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
 }
 .photo-drop span {
-  font-size: 11px;
+  font-size: 14px;
 }
 .photo-locator {
   position: relative;
@@ -730,8 +730,8 @@ h1 {
   width: 100%;
 }
 .subnote {
-  font-size: 10px;
-  color: #969f87;
+  font-size: 14px;
+  color: #52604a;
   line-height: 1.9;
 }
 .destination {
@@ -741,7 +741,7 @@ h1 {
 }
 .photo-panel label {
   margin-top: 18px;
-  font-size: 11px;
+  font-size: 14px;
 }
 .review-heading {
   display: flex;
@@ -761,17 +761,17 @@ h1 {
   text-align: center;
   justify-content: center;
   min-height: 460px;
-  color: #acb59d;
+  color: #52604a;
 }
 .review-empty h2 {
   font:
-    22px "Songti SC",
+    24px "Songti SC",
     serif;
-  color: #7b8c68;
+  color: #52604a;
   margin: 25px 0 12px;
 }
 .review-empty p {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.9;
 }
 .candidate {
@@ -792,22 +792,22 @@ h1 {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: 14px;
 }
 .candidate-top button {
   margin-left: auto;
   background: none;
-  color: #8b9b73;
+  color: #52604a;
 }
 .confidence {
-  font-size: 9px;
-  color: #9d7849;
+  font-size: 14px;
+  color: #52604a;
   background: #f5ecd8;
   padding: 4px 7px;
   border-radius: 4px;
 }
 .confidence.high {
-  color: #69814b;
+  color: #52604a;
   background: #edf2e3;
 }
 .candidate-fields {
@@ -817,15 +817,15 @@ h1 {
   margin-top: 16px;
 }
 .candidate-fields label {
-  font-size: 10px;
+  font-size: 14px;
 }
 .candidate-fields input {
-  font-size: 12px;
+  font-size: 14px;
   padding: 9px;
 }
 .duplicate {
-  font-size: 10px;
-  color: #a27946;
+  font-size: 14px;
+  color: #52604a;
   line-height: 1.8;
   background: #f5eedf;
   padding: 8px;
@@ -841,8 +841,8 @@ h1 {
   margin-top: 20px;
 }
 .save-bar > span {
-  font-size: 11px;
-  color: #869772;
+  font-size: 14px;
+  color: #52604a;
 }
 .settings-grid {
   display: grid;
@@ -860,13 +860,13 @@ h1 {
   margin: 23px 0 13px;
 }
 .settings-card > p {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.9;
-  color: #8b9979;
+  color: #52604a;
 }
 .settings-card label {
   margin: 22px 0;
-  font-size: 11px;
+  font-size: 14px;
 }
 .settings-card > .primary,
 .settings-card > .secondary {
@@ -884,15 +884,15 @@ h1 {
   border-radius: 6px;
   padding: 40px 12px;
   margin: 30px 0 20px;
-  color: #83986a;
+  color: #52604a;
 }
 .backup-box strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
 }
 .backup-box span {
-  font-size: 10px;
-  color: #9ca98a;
+  font-size: 14px;
+  color: #52604a;
 }
 .edit-dialog {
   border: 1px solid #ced8bd;
@@ -900,13 +900,13 @@ h1 {
   background: #fffdf6;
   padding: 27px;
   width: min(450px, 92vw);
-  color: #3d4b30;
+  color: #52604a;
   max-height: 90vh;
   overflow: auto;
 }
 .edit-dialog::backdrop {
   background: #1d2718aa;
-  backdrop-filter: blur(3px);
+
 }
 .dialog-heading {
   display: flex;
@@ -915,7 +915,7 @@ h1 {
 }
 .dialog-heading h2 {
   font:
-    23px "Songti SC",
+    24px "Songti SC",
     serif;
   margin: 0;
 }
@@ -939,12 +939,12 @@ footer {
   justify-content: space-between;
   gap: 20px;
   padding: 30px 0;
-  font-size: 9px;
-  color: #a5ac94;
+  font-size: 14px;
+  color: #52604a;
 }
 footer span:last-child {
-  font: 8px monospace;
-  letter-spacing: 1px;
+  font: 14px sans-serif;
+  letter-spacing: normal;
 }
 @media (max-width: 1100px) {
   .sidebar {
@@ -952,10 +952,10 @@ footer span:last-child {
     padding: 25px 18px;
   }
   .brand > span {
-    font-size: 20px;
+    font-size: 24px;
   }
   .brand small {
-    font-size: 6px;
+    font-size: 14px;
   }
   .shell > main {
     padding: 0 3%;
@@ -966,10 +966,10 @@ footer span:last-child {
     gap: 8px;
   }
   .stats strong {
-    font-size: 30px;
+    font-size: 32px;
   }
   .stats span {
-    font-size: 9px;
+    font-size: 14px;
   }
   .library-content.with-details {
     grid-template-columns: minmax(0, 1fr) 215px;
@@ -1015,7 +1015,7 @@ footer span:last-child {
     gap: 15px;
   }
   .brand small {
-    font-size: 6px;
+    font-size: 14px;
   }
   .sidebar > .nav-heading,
   .shelf-nav,
@@ -1031,7 +1031,7 @@ footer span:last-child {
   .sidebar nav button {
     width: auto;
     padding: 10px 12px;
-    font-size: 11px;
+    font-size: 14px;
   }
   .sidebar-bottom {
     position: absolute;
@@ -1054,22 +1054,22 @@ footer span:last-child {
     height: 48px;
   }
   .header-date {
-    font-size: 6px;
+    font-size: 14px;
   }
   .page-title {
     padding: 27px 0 23px;
     align-items: flex-start;
   }
   .page-title h1 {
-    font-size: 27px;
+    font-size: 32px;
   }
   .page-title p {
-    font-size: 11px;
+    font-size: 14px;
     max-width: 250px;
   }
   .page-title > .primary {
     padding: 9px;
-    font-size: 10px;
+    font-size: 14px;
     margin-top: 28px;
     gap: 5px;
   }
@@ -1088,10 +1088,10 @@ footer span:last-child {
     align-items: flex-start;
   }
   .stats strong {
-    font-size: 29px;
+    font-size: 32px;
   }
   .stats span {
-    font-size: 8px;
+    font-size: 14px;
     white-space: nowrap;
   }
   .library-tools {
@@ -1118,10 +1118,10 @@ footer span:last-child {
     min-height: 160px;
   }
   .shelf-title h2 {
-    font-size: 18px;
+    font-size: 16px;
   }
   .shelf-title > span {
-    font-size: 8px;
+    font-size: 14px;
   }
   .shelf-row {
     padding: 26px 18px 0;
@@ -1143,7 +1143,7 @@ footer span:last-child {
     padding: 38px 20px;
   }
   .onboarding h2 {
-    font-size: 23px;
+    font-size: 24px;
   }
   .list-book {
     gap: 10px;
@@ -1152,24 +1152,24 @@ footer span:last-child {
     font-size: 14px;
   }
   .list-location {
-    font-size: 8px;
+    font-size: 14px;
     max-width: 90px;
   }
   .list-location small {
-    font-size: 8px;
+    font-size: 14px;
   }
   .status-tag {
     display: none;
   }
   footer {
-    font-size: 8px;
+    font-size: 14px;
     line-height: 1.8;
   }
   footer span:last-child {
-    font-size: 6px;
+    font-size: 14px;
   }
   .page-title > .text-button {
-    font-size: 9px;
+    font-size: 14px;
     white-space: nowrap;
     margin-top: 30px;
   }
@@ -1183,3 +1183,52 @@ footer span:last-child {
 .spine small, .spine i, .detail-cover p { color: inherit; opacity: .8; }
 .spine span { text-shadow: none; }
 @media(max-width:760px){ .page-title { display: block; } .page-title > .primary, .page-title > .text-button { margin-top: 14px; } }
+
+/* Audit: one four-size scale, warm text and readable controls. */
+body { line-height: 1.6; }
+input, select, textarea { font-size: 16px; }
+button, a { touch-action: manipulation; }
+button { min-height: 40px; }
+.brand small, .header-date, .eyebrow, footer span:last-child { font-family: inherit; }
+.sidebar { width: 250px; }
+.stats { grid-template-columns: repeat(4,minmax(0,1fr)); }
+.stats > div, .stats > button { flex-wrap: wrap; }
+.shelf-title { align-items: flex-start; flex-wrap: wrap; }
+.shelf-title > span { max-width: 100%; white-space: normal; overflow: visible; }
+.spine { width: 76px; box-shadow: none; }
+.spine:nth-child(3n) { width: 76px; }
+.spine small { display: none; } /* Author is available in the list and details. */
+.spine i { font-style: normal; font-size: 14px; }
+.spine span { max-height: none; }
+.wood-edge, .detail-cover, .mini-cover, .book-illustration span { box-shadow: none; }
+.row-label { top: 5px; }
+.notice.error, .duplicate, .confidence { background: #eeece4; border-color: #c8c9bd; color: #4a5145; }
+.review-panel .candidate { border: 0; border-radius: 0; border-top: 1px solid #dce0d0; padding: 18px 0; }
+.edit-dialog { box-shadow: 0 12px 40px #17201733; }
+.library-tools { flex-wrap: wrap; }
+.list-book { flex-wrap: wrap; }
+.list-book > span { min-width: 0; overflow-wrap: anywhere; }
+footer { flex-wrap: wrap; }
+@media(max-width:760px) {
+ .sidebar { width: 100%; }
+ .brand small, .header-date { display: none; }
+ .sidebar-bottom button { font-size: 14px; min-height: 44px; }
+ .sidebar-bottom { top: 12px; right: 10px; }
+ .sidebar nav { flex-wrap: wrap; }
+ .page-title h1 { font-size: 32px; }
+ .stats { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px 0; }
+ .stats > div, .stats > button { flex-direction: row; align-items: baseline; }
+ .stats > :nth-child(2) { border-right: 0; }
+ .stats strong { font-size: 32px; }
+ .library-tools > select { flex: 1; width: auto; min-width: 140px; }
+ .list-location { max-width: none; }
+ .status-tag { display: inline; }
+ .candidate-fields { grid-template-columns: 1fr; }
+ .review-heading, .save-bar { flex-wrap: wrap; }
+ .photo-actions { flex-wrap: wrap; }
+ .shelf-row { padding-top: 35px; }
+}
+
+/* Prevent browser defaults adding extra sizes. */
+small { font-size: 14px; }
+h3 { font-size: 16px; }

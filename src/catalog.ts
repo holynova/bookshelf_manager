@@ -7,6 +7,7 @@ export interface Candidate {
   position: number;
   confidence: "high" | "medium" | "low";
   bbox?: [number, number, number, number];
+  locationUncertain?: boolean;
 }
 const isRecord = (x: unknown): x is Record<string, unknown> =>
   typeof x === "object" && x !== null && !Array.isArray(x);
@@ -30,6 +31,7 @@ export function validateCandidates(value: unknown): Candidate[] {
       const v = Number(item[key]);
       return Number.isInteger(v) && v >= 1 && v <= 100 ? v : 1;
     };
+    const locationUncertain = [item.row, item.position].some((v) => !Number.isInteger(Number(v)) || Number(v) < 1 || Number(v) > 100);
     let bbox: Candidate["bbox"];
     if (
       Array.isArray(item.bbox) &&
@@ -50,8 +52,9 @@ export function validateCandidates(value: unknown): Candidate[] {
         : "#64745a",
       row: coordinate("row"),
       position: coordinate("position"),
+      locationUncertain,
       confidence:
-        item.confidence === "high"
+        locationUncertain ? "low" : item.confidence === "high"
           ? "high"
           : item.confidence === "medium"
             ? "medium"

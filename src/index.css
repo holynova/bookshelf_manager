@@ -4,7 +4,7 @@
 body {
   margin: 0;
   background: #f7f5ef;
-  color: #373d33;
+  color: #52604a;
   font:
     14px Inter,
     -apple-system,
@@ -45,8 +45,8 @@ textarea:focus-visible {
 }
 label {
   display: block;
-  font-size: 12px;
-  color: #757e6b;
+  font-size: 14px;
+  color: #52604a;
 }
 input,
 select,

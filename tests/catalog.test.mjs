@@ -73,3 +73,12 @@ test("round trips valid archive and normalizes duplicate identities", () => {
   assert.equal(b.books[0].position, 2);
   assert.equal(identity("《三 体》", "刘 慈欣"), identity("三体", "刘慈欣"));
 });
+
+test("invalid position is explicitly uncertain even when model claims high confidence", () => {
+ const [book] = validateCandidates({books:[{title:"书",row:0,position:101,confidence:"high"}]});
+ assert.equal(book.locationUncertain,true);
+ assert.equal(book.confidence,"low");
+ const [valid] = validateCandidates({books:[{title:"书",row:1,position:2,confidence:"high"}]});
+ assert.equal(valid.locationUncertain,false);
+ assert.equal(valid.confidence,"high");
+});

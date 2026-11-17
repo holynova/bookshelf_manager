@@ -165,7 +165,7 @@ export default function App() {
       if (!photo) throw new Error("请先上传书架照片。");
       if (!key || !model)
         throw new Error(
-          "请先在模型设置中填写接口、模型和 API Key，或使用演示校对。",
+          "请先设置识别服务，或选择手动录入。",
         );
       const c = new AbortController();
       abort.current = c;
@@ -390,7 +390,9 @@ export default function App() {
       if (
         !edit.title.trim() ||
         edit.row < 1 ||
+        edit.row > 100 ||
         edit.position < 1 ||
+        edit.position > 100 ||
         !Number.isInteger(edit.row) ||
         !Number.isInteger(edit.position)
       )
@@ -420,7 +422,7 @@ export default function App() {
         <a className="brand" href="./">
           <BookOpen size={26} />
           <span>
-            书香管家<small>A HOME FOR EVERY BOOK</small>
+            书香管家<small>家庭藏书管理</small>
           </span>
         </a>
         <div className="nav-heading">我的书房</div>
@@ -499,7 +501,7 @@ export default function App() {
                 ? "拍照整理"
                 : "模型与备份"}
           </div>
-          <span className="header-date">BOOKSHELF / VOL. 02</span>
+          <span className="header-date">藏书工作台</span>
         </header>
         {(notice || error) && (
           <div
@@ -535,7 +537,7 @@ export default function App() {
           <>
             <section className="page-title">
               <div>
-                <div className="eyebrow">YOUR PERSONAL LIBRARY</div>
+                <div className="eyebrow">我的藏书</div>
                 <h1>每一本书，都找得到。</h1>
                 <p>记住你读过的世界，也记住它们在书架上的位置。</p>
               </div>
@@ -894,7 +896,7 @@ export default function App() {
           <>
             <section className="page-title">
               <div>
-                <div className="eyebrow">A PLACE FOR EVERY STORY</div>
+                <div className="eyebrow">拍照整理</div>
                 <h1>拍下来，再慢慢整理。</h1>
                 <p>正面拍摄书脊，光线均匀。识别结果经你核对后才会入库。</p>
               </div>
@@ -977,6 +979,7 @@ export default function App() {
                     取消识别
                   </button>
                 )}
+                {(!key || !model) && (<button className="secondary" onClick={() => setTab("settings")}>设置识别服务</button>)}
                 <p className="subnote">
                   点击识别会将照片发送到你配置的模型服务。
                   <br />
@@ -1072,7 +1075,7 @@ export default function App() {
                               已核对
                             </label>
                             <span className={`confidence ${b.confidence}`}>
-                              {b.confidence === "high"
+                              {b.locationUncertain ? "位置待核对" : b.confidence === "high"
                                 ? "较清晰"
                                 : b.confidence === "medium"
                                   ? "需核对"
@@ -1095,6 +1098,7 @@ export default function App() {
                               <X size={14} />
                             </button>
                           </div>
+                          {b.locationUncertain && <p className="subnote">位置未识别，层数和顺序暂填 1；请按照片核对。</p>}
                           <div className="candidate-fields">
                             <label>
                               书名
@@ -1185,7 +1189,7 @@ export default function App() {
           <>
             <section className="page-title">
               <div>
-                <div className="eyebrow">MAKE YOURSELF AT HOME</div>
+                <div className="eyebrow">识别服务与备份</div>
                 <h1>让书房，按你的方式运转。</h1>
                 <p>连接你信任的模型，定期备份你的藏书。</p>
               </div>
@@ -1287,7 +1291,7 @@ export default function App() {
         )}
         <footer>
           <span>书香管家 · 为每一本书，留一个位置。</span>
-          <span>LOCAL FIRST, ALWAYS.</span>
+          <span>数据保存在当前浏览器</span>
         </footer>
       </main>
       <dialog
@@ -1297,6 +1301,7 @@ export default function App() {
       >
         {edit && (
           <form onSubmit={saveEdit}>
+            {error && <p className="notice error" role="alert">{error}</p>}
             <div className="dialog-heading">
               <h2>编辑藏书档案</h2>
               <button
